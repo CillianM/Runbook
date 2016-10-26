@@ -1,11 +1,8 @@
 from tkinter import *
 import tkinter.messagebox as tm
-from bs4 import BeautifulSoup as xmlParse
 import paramiko
 import time
 import xmltodict
-#viePaitah3
-#10
 
 class LoginFrame(Frame):
     def __init__(self, master):
