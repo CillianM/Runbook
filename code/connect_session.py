@@ -63,6 +63,7 @@ class LoginFrame(Frame):
             print("Requested system snapshot, waiting 1 minute looped")
             self._check(term, 60,"root")
             print("Request accepted, Partitioned snapshot")
+            self._send_command(term, "set cli screen-length 0")
             print("Seraching Junos version")
             output = self._send_command(term,"show system snapshot media internal | display xml")
             output = output[51:(len(output)) - 10]
@@ -103,7 +104,7 @@ class LoginFrame(Frame):
         output = term.recv(2024)
         #Convert byte output to string
         fOutput = output.decode("utf-8")
-        print(fOutput)
+        #print(fOutput)
         return fOutput
 
     def _parse_xml_serial(self,xml):
@@ -120,10 +121,10 @@ class LoginFrame(Frame):
         newVersion = mydict['rpc-reply']['snapshot-information']['software-version'][1]['package']['package-version']
         print("New Version: " + newVersion)
         print("Old Version " + oldVersion)
-        if(newVersion == "15.1X49-D50.3-domestic"):
+        if(newVersion == "15.1X49-D60.3-domestic"):
             print("New Version updated")
             self._send_command(term,"show system snapshot media internal")
-            if(oldVersion == "15.1X49-D50.3-domestic"):
+            if(oldVersion == "15.1X49-D60.7-domestic"):
                 print("New Version updated")
                 self._send_command(term, "configure")
                 return True;
