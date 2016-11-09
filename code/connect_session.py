@@ -1,8 +1,11 @@
 from tkinter import *
+import threading
 import tkinter.messagebox as tm
 import paramiko
 import time
 import xmltodict
+#viePaitah3
+#10
 
 class LoginFrame(Frame):
     def __init__(self, master):
@@ -28,122 +31,188 @@ class LoginFrame(Frame):
 
         self.pack()
 
-
-    def _connect_session(self,username,hostname,password):
-        try:
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(hostname, 22, username, password)
-            term = ssh.invoke_shell()
-            print("Connected")
-            #set cli screen-length 0
-
-            self._check(term,5,"login")
-            self._login(term)
-            print("Logged in")
-            self._send_command(term, "set cli screen-length 0")
-
-            xml = self._send_command(term, "show chassis hardware | display xml")
-            xml = xml[37:(len(xml)) -10]
-            text_file = open("Output.xml", "w")
-            text_file.write(xml)
-            text_file.close()
-            print("Parsed xml")
-            self._parse_xml_serial("Output.xml")
-
-            self._send_command(term, "request system software add \"ftp://10.179.236.10/junos-srxsme-15.1X49-D60.7-domestic.tgz\" no-copy no-validate reboot")
-            print("Requested System software, waiting 2 minutes looped")
-            self._check(term, 120,"login")
-            self._login(term)
-            print("Logged in again")
-            self._send_command(term, "request system snapshot media internal slice alternate")
-            print("Requested system snapshot, waiting 1 minute looped")
-            self._check(term, 60,"root")
-            print("Request accepted, Partitioned snapshot")
-            self._send_command(term, "set cli screen-length 0")
-            print("Seraching Junos version")
-            output = self._send_command(term,"show system snapshot media internal | display xml")
-            output = output[51:(len(output)) - 10]
-            text_file = open("Output.xml", "w")
-            text_file.write(output)
-            text_file.close()
-            print("Parsing Junos version")
-            if(self._parse_xml_version("Output.xml",term)):
-                #self._send_command(term, "delete /yes")
-                #self._send_command(term, "load set \"ftp://Administrator@10.179.236.10/config.conf\"")
-                #self._send_command(term,"set system login user Agile class super-user")
-                #self._send_command(term,"set system login user authentication plain-text-password")
-                #self._send_command(term, "password")
-                #self._send_command(term, "password")
-                #self._send_command(term, "commit-and quit")
-                print("Versions ok")
-                self._send_command(term, "request system halt in 0 / yes")
-            else:
-                print("Versions not configured properly")
-
-            ssh.close()
-        except paramiko.ssh_exception.BadHostKeyException:
-            tm.showerror("Host Key Error!","Server’s host key could not be verified")
-        except paramiko.ssh_exception.AuthenticationException:
-            tm.showerror("Authentication Error!", "Authentication failed, Check your details and try again")
-        except paramiko.ssh_exception.SSHException:
-            tm.showerror("Unknown Error!","Unknown error connecting or establishing an SSH session")
-
     def _login_btn_clickked(self):
         if len(self.entry_1.get()) < 1 or len(self.entry_2.get()) < 1:
             tm.showerror("Login Error","Enter a full name and address")
         else:
-            self._connect_session(self.entry_1.get(),self.entry_2.get(),self.entry_3.get())
+            patch_crypto_be_discovery()
+            t = threading.Thread(target=_connect_session, args = (self.entry_1.get(),self.entry_2.get(),self.entry_3.get()))
+            t.daemon = True
+            t.start()
+            tm.showinfo("Thread created", "You can add another device now")
 
-    def _send_command(self,term,cmd):
-        term.send(cmd + "\n")
-        time.sleep(3)
-        output = term.recv(2024)
-        #Convert byte output to string
-        fOutput = output.decode("utf-8")
-        #print(fOutput)
-        return fOutput
+def _connect_session(username,hostname,password):
+    try:
+        #replace port colon with underscore for filename
+        filename = username.replace(":","_") + ".xml"
+        print ("Filename will be " + filename)
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(hostname, 22, username, password)
+        term = ssh.invoke_shell()
+        print(username + ": " +"Connected")
+        #set cli screen-length 0
+        checkRoot(term,5,"login",username)
+        print(username + ": " +"Logged in")
+        send_command(term, "set cli screen-length 0")
+        xml = send_command(term, "show chassis hardware | display xml")
+        xml = xml[37:(len(xml)) -10]
+        text_file = open(filename, "w")
+        text_file.write(xml)
+        text_file.close()
+        print(username + ": " +"Parsing xml for serial")
+        parse_xml_serial(filename,username)
 
-    def _parse_xml_serial(self,xml):
+        send_command(term, "request system software add \"ftp://10.179.236.10/junos-srxsme-15.1X49-D50.3-domestic.tgz\" no-copy no-validate reboot")
+        print(username + ": " +"Requested System software, waiting 2 minutes looped")
+        check(term, 120,"login",username)
+        print(username + ": " +"Logged in again")
+        send_command(term, "request system snapshot media internal slice alternate")
+        print(username + ": " +"Requested system snapshot, waiting 1 minute looped")
+        check(term, 60,"root",username)
+        print(username + ": " +"Request accepted, Partitioned snapshot")
+        print(username + ": " +"Seraching Junos version")
+        send_command(term, "set cli screen-length 0")
+        output = send_command(term,"show system snapshot media internal | display xml")
+        output = output[51:(len(output)) - 10]
+        text_file = open(filename, "w")
+        text_file.write(output)
+        text_file.close()
+        print(username + ": " +"Parsing Junos version")
+        if(parse_xml_version(filename,term,username)):
+            #_send_command(term, "delete /yes")
+            #_send_command(term, "load set \"ftp://Administrator@10.179.236.10/config.conf\"")
+            #_send_command(term,"set system login user Agile class super-user")
+            #_send_command(term,"set system login user authentication plain-text-password")
+            #_send_command(term, "password")
+            #_send_command(term, "password")
+            #_send_command(term, "commit-and quit")
+            print(username + ": " +"Versions ok")
+            send_command(term, "request system halt in 0")
+            time.sleep(2)
+            send_command(term, "yes")
+        else:
+            print(username + ": " +"Versions not configured properly")
+
+        print(username + ": " + "Shutting down")
+        send_command(term, "request system halt in 0")
+        time.sleep(2)
+        send_command(term,"yes")
+
+        ssh.close()
+        return
+    except paramiko.ssh_exception.BadHostKeyException:
+        tm.showerror("Host Key Error!","Server’s host key could not be verified")
+    except paramiko.ssh_exception.AuthenticationException:
+        tm.showerror("Authentication Error!", "Authentication failed, Check your details and try again")
+    except paramiko.ssh_exception.SSHException:
+        tm.showerror("Unknown Error!","Unknown error connecting or establishing an SSH session")
+
+
+
+
+def send_command(term, cmd):
+    term.send(cmd + "\n")
+    time.sleep(3)
+    output = term.recv(2024)
+    # Convert byte output to string
+    fOutput = output.decode("utf-8")
+    # print(fOutput)
+    return fOutput
+
+
+def parse_xml_serial(xml,username):
+    with open(xml) as fd:
+        mydict = xmltodict.parse(fd.read())
+    print(username + ": " +"Serial number is: {}".format(
+        mydict['rpc-reply']['chassis-inventory']['chassis']['serial-number']
+    ))
+
+
+def parse_xml_version(xml, term,username):
+    try:
         with open(xml) as fd:
             mydict = xmltodict.parse(fd.read())
-        print("Serial number is: {}".format(
-            mydict['rpc-reply']['chassis-inventory']['chassis']['serial-number']
-        ))
-
-    def _parse_xml_version(self,xml,term):
-        with open(xml) as fd:
-            mydict = xmltodict.parse(fd.read())
-        oldVersion = mydict['rpc-reply']['snapshot-information']['software-version'][0]['package']['package-version']
-        newVersion = mydict['rpc-reply']['snapshot-information']['software-version'][1]['package']['package-version']
-        print("New Version: " + newVersion)
-        print("Old Version " + oldVersion)
-        if(newVersion == "15.1X49-D60.3-domestic"):
-            print("New Version updated")
-            self._send_command(term,"show system snapshot media internal")
-            if(oldVersion == "15.1X49-D60.7-domestic"):
-                print("New Version updated")
-                self._send_command(term, "configure")
+        backupVersion= mydict['rpc-reply']['snapshot-information']['software-version'][0]['package']['package-version']
+        primaryVersion = mydict['rpc-reply']['snapshot-information']['software-version'][1]['package']['package-version']
+        print(username + ": " +"Primary Version: " + primaryVersion)
+        print(username + ": " +"Backup Version " + backupVersion)
+        if ("D50.3" in primaryVersion):
+            print(username + ": " +"New Version updated")
+            if (backupVersion == primaryVersion):
+                print(username + ": " +"New Version updated")
+                send_command(term, "configure")
                 return True;
             else:
                 return False;
         else:
             return False;
+    except:
+        print(username + ": " + "XML Parse Error, Skipping version check")
+        return False;
 
-    def _check(self,term,timeToWait,promptToWaitFor):
-        ready = False
-        while (not ready):
-            time.sleep(timeToWait)
-            print("Looping for another " + str(timeToWait) + " seconds waiting for " + promptToWaitFor)
-            answer = self._send_command(term, "")
-            print(answer)
-            if (promptToWaitFor in answer):
-                ready = True
 
-    def _login(self,term):
-        self._send_command(term, "root")
-        self._send_command(term, "")
-        self._send_command(term, "cli")
+def check( term, timeToWait, promptToWaitFor,username):
+    timesChecked = 1
+    ready = False
+    while (not ready):
+        print(username + ": " +"Checked "+ str(timesChecked) + " Times(s), Looping for another " + str(timeToWait) + " seconds waiting for " + promptToWaitFor)
+        answer = send_command(term, "")
+        #print(answer)
+        if (promptToWaitFor in answer):
+            if(promptToWaitFor == "login"):
+                _login(term)
+            ready = True
+        timesChecked = timesChecked + 1
+        time.sleep(timeToWait)
+
+def checkRoot( term, timeToWait, promptToWaitFor,username):
+    timesChecked = 1
+    ready = False
+    while (not ready):
+        print(username + ": " + "Checked " + str(timesChecked) + " Times(s), Looping for another " + str(
+            timeToWait) + " seconds waiting for " + promptToWaitFor)
+        answer = send_command(term, "")
+        # print(answer)
+        if (promptToWaitFor in answer):
+            _login(term)
+            ready = True
+        if (promptToWaitFor == "login" and "root" in answer):
+            send_command(term, "exit")
+            send_command(term, "exit")
+            _login(term)
+            ready = True
+        timesChecked = timesChecked + 1
+        time.sleep(timeToWait)
+
+
+def _login( term):
+    send_command(term, "root")
+    send_command(term, "")
+    send_command(term, "cli")
+
+
+def patch_crypto_be_discovery():
+    """
+    Monkey patches cryptography's backend detection.
+    Objective: support pyinstaller freezing.
+    """
+
+    from cryptography.hazmat import backends
+
+    try:
+        from cryptography.hazmat.backends.commoncrypto.backend import backend as be_cc
+    except ImportError:
+        be_cc = None
+
+    try:
+        from cryptography.hazmat.backends.openssl.backend import backend as be_ossl
+    except ImportError:
+        be_ossl = None
+
+    backends._available_backends_list = [
+        be for be in (be_cc, be_ossl) if be is not None
+        ]
 
 root = Tk()
 lf = LoginFrame(root)
