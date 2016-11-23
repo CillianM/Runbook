@@ -1,0 +1,6 @@
+*.ui
+*.spec
+./code/Deployment/.idea
+./code/Deployment/__pycache__
+./code/Deployment/build
+./code/Deployment/dist
