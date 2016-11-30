@@ -1,4 +1,4 @@
-![](media/5a066730794b23cca4ce00f92695e2c8.jpg)
+![](http://i.imgur.com/cJ5u9Pt.jpg)
 
 Overview
 ========
