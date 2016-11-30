@@ -212,7 +212,7 @@ further define the most common users we have developed two sample personas.
 
 | **Kevin**                                                                                            | **Biography** Kevin is a 25-year-old Network Engineer. He has recently left college and has an in depth theoretical knowledge of networking, but very little practical experience. His expertise with software systems is quite broad as most work he has done previously has been completed using high level applications. Has very little knowledge of vendor specific systems and how to configure, upgrade and troubleshoot them. |
 |------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [./media/image2.jpeg](./media/image2.jpeg)                                                           |                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+|                                                         |                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | **Demographics Age** 25 **Occupation** Network Engineer **Tech literacy** Very high **Residence** UK | **System expectations and requirements:**                                                                                                                                                                                                                                                                                                                                                                                             |
 
 -   Provide a level of abstraction from the CLI
@@ -225,7 +225,7 @@ further define the most common users we have developed two sample personas.
 
 | **Simon**                                                                                                  | **Biography** Simon is a 56-year-old Network Architect, with over thirty years of experience in the industry. Preferring a more “low level” approach to interacting with and configuring devices over the command line interface. Vast practical networking knowledge, however his experience with software systems is lacking. He has numerous certifications from vendors such as Cisco, Juniper Networks, etc. |
 |------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [./media/image3.jpg](./media/image3.jpg)                                                                   |                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|                                                                  |                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **Demographics Age** 56 **Occupation** Network Architect **Tech literacy** Very High **Residence** Ireland | **System expectations and requirements:**                                                                                                                                                                                                                                                                                                                                                                         |
 
 -   Automate time consuming tasks, which he would have had to delegate to other
@@ -424,29 +424,29 @@ Deployment
 
 ### Deployment Module – Network Diagram
 
-![](media/a39d7701ee6f7c41ba24a798dfb81362.png)
+![](http://i.imgur.com/OTiAOjy.png)
 
 High-Level Design
 =================
 
 ### Application Architecture Diagram
 
-![](media/46f481edf4c31e8aa1f54b22250e3b17.png)
+![](http://i.imgur.com/NGzXkJg.png)
 
 ### Data Flow Diagram – Deployment Module
 
 
-![](media/c2386d3dde009fe63507a134986d9f0a.png)
+![](http://i.imgur.com/YG7fBy8.png)
 
 ### Data Flow Diagram – Maintenance Module
 
-![](media/a477673d84797a3bff4ca632e2f43d19.png)
+![](http://i.imgur.com/HOf5jWa.png)
 
 ### Data Flow Diagram – Troubleshooting Module
 
 
 
-![](media/77120f848738e83df659f8e5fdb2ac5f.png)
+![](http://i.imgur.com/SZKffyP.png)
 
 Project Schedule
 ================
@@ -460,45 +460,5 @@ Project Schedule
     changes to the direction we’re taking. Meetings will take place weekly with
     our supervisor Brian Stone (where permitting) and by ourselves in person and
     over skype.
-
-| *Starting 17/10/16*            | Week 1  | Week 2  | Week 3  | Week 4  | Week 5  | Week 6  | Week 7  | Week 8  | Week 9  | Week 10 | Week 11 |
-|--------------------------------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|---------|
-| **Requirements Analysis**      |         |         |         |         |         |         |         |         |         |         |         |
-| **Design Analysis**            |         |         |         |         |         |         |         |         |         |         |         |
-| **Project Planning**           |         |         |         |         |         |         |         |         |         |         |         |
-| **Project Proposal**           |         |         |         |         |         |         |         |         |         |         |         |
-| **Deployment Prototype**       |         |         |         |         |         |         |         |         |         |         |         |
-| **GUI Prototype**              |         |         |         |         |         |         |         |         |         |         |         |
-| **Functional Specification**   |         |         |         |         |         |         |         |         |         |         |         |
-| **Maintenance Prototype**      |         |         |         |         |         |         |         |         |         |         |         |
-| **Troubleshooting Prototype**  |         |         |         |         |         |         |         |         |         |         |         |
-| **Launcher Prototype**         |         |         |         |         |         |         |         |         |         |         |         |
-| **Overall Prototype Build**    |         |         |         |         |         |         |         |         |         |         |         |
-| **User Testing**               |         |         |         |         |         |         |         |         |         |         |         |
-| **Testing unit/code/coverage** |         |         |         |         |         |         |         |         |         |         |         |
-| **Testing/Code Review**        |         |         |         |         |         |         |         |         |         |         |         |
-| **Documentation**              |         |         |         |         |         |         |         |         |         |         |         |
-| **Project Minutes**            |         |         |         |         |         |         |         |         |         |         |         |
-| *Starting 17/10/16*            | Week 12 | Week 13 | Week 14 | Week 15 | Week 16 | Week 17 | Week 18 | Week 19 | Week 20 |         |         |
-| **Deployment Build**           |         |         |         |         |         |         |         |         |         |         |         |
-| **Maintenance Build**          |         |         |         |         |         |         |         |         |         |         |         |
-| **Troubleshooting Build**      |         |         |         |         |         |         |         |         |         |         |         |
-| **GUI Build**                  |         |         |         |         |         |         |         |         |         |         |         |
-| **Launcher Build**             |         |         |         |         |         |         |         |         |         |         |         |
-| **Overall Build**              |         |         |         |         |         |         |         |         |         |         |         |
-| **User Testing**               |         |         |         |         |         |         |         |         |         |         |         |
-| **Test Planning**              |         |         |         |         |         |         |         |         |         |         |         |
-| **Test Development**           |         |         |         |         |         |         |         |         |         |         |         |
-| **Boundary Value Testing**     |         |         |         |         |         |         |         |         |         |         |         |
-| **Equivalence Testing**        |         |         |         |         |         |         |         |         |         |         |         |
-| **Decision Tables**            |         |         |         |         |         |         |         |         |         |         |         |
-| **Functional Testing**         |         |         |         |         |         |         |         |         |         |         |         |
-| **Structural Testing**         |         |         |         |         |         |         |         |         |         |         |         |
-| **Path Testing**               |         |         |         |         |         |         |         |         |         |         |         |
-| **Data Flow Testing**          |         |         |         |         |         |         |         |         |         |         |         |
-| **Data Dependence**            |         |         |         |         |         |         |         |         |         |         |         |
-| **Integration Testing**        |         |         |         |         |         |         |         |         |         |         |         |
-| **Testing Review & Write-up**  |         |         |         |         |         |         |         |         |         |         |         |
-| **Code Review**                |         |         |         |         |         |         |         |         |         |         |         |
-| **Documentation**              |         |         |         |         |         |         |         |         |         |         |         |
-| **Project Minutes**            |         |         |         |         |         |         |         |         |         |         |         |
+![](http://i.imgur.com/MqV34Wh.jpg)
+![](http://i.imgur.com/IrNphuo.jpg)
