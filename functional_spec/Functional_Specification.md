@@ -1,5 +1,27 @@
 ![](http://i.imgur.com/cJ5u9Pt.jpg)
 
+# Table of Contents
+1. [Overview](#overview)
+2. [Business Context](#business-context)
+3. [Glossary](#glossary)
+4. [Operational Scenarios](#operational-scenarios)
+5. [Deployment](#deployment)
+6. [Glossary](#glossary)
+7. [Glossary](#glossary)
+8. [Glossary](#glossary)
+9. [Glossary](#glossary)
+10. [Glossary](#glossary)
+11. [Glossary](#glossary)
+12. [Glossary](#glossary)
+13. [Glossary](#glossary)
+14. [Glossary](#glossary)
+15. [Glossary](#glossary)
+16. [Glossary](#glossary)
+17. [Glossary](#glossary)
+18. [Glossary](#glossary)
+19. [Glossary](#glossary)
+20. [Glossary](#glossary)
+
 Overview
 ========
 
@@ -211,8 +233,7 @@ direct way. We are aware that our target market is quite narrow, in order to
 further define the most common users we have developed two sample personas.
 
 | **Kevin**                                                                                            | **Biography** Kevin is a 25-year-old Network Engineer. He has recently left college and has an in depth theoretical knowledge of networking, but very little practical experience. His expertise with software systems is quite broad as most work he has done previously has been completed using high level applications. Has very little knowledge of vendor specific systems and how to configure, upgrade and troubleshoot them. |
-|------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|                                                         |                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+|------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|                                                                                                                                                                                                                                                                                                                                           |
 | **Demographics Age** 25 **Occupation** Network Engineer **Tech literacy** Very high **Residence** UK | **System expectations and requirements:**                                                                                                                                                                                                                                                                                                                                                                                             |
 
 -   Provide a level of abstraction from the CLI
@@ -224,8 +245,7 @@ further define the most common users we have developed two sample personas.
     manner
 
 | **Simon**                                                                                                  | **Biography** Simon is a 56-year-old Network Architect, with over thirty years of experience in the industry. Preferring a more “low level” approach to interacting with and configuring devices over the command line interface. Vast practical networking knowledge, however his experience with software systems is lacking. He has numerous certifications from vendors such as Cisco, Juniper Networks, etc. |
-|------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|                                                                  |                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|                                                                                                                                                                                               |
 | **Demographics Age** 56 **Occupation** Network Architect **Tech literacy** Very High **Residence** Ireland | **System expectations and requirements:**                                                                                                                                                                                                                                                                                                                                                                         |
 
 -   Automate time consuming tasks, which he would have had to delegate to other
