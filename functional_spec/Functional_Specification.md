@@ -1,4 +1,4 @@
-![](http://i.imgur.com/cJ5u9Pt.jpg)
+![](http://i.imgur.com/hAHmHAT.jpg)
 
 # Table of Contents
 1. [Overview](#overview)
