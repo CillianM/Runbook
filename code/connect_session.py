@@ -330,6 +330,8 @@ def _login(term):
     send_command(term, "")
     send_command(term, "cli")
 
+#Credit to exvito for patch
+#link: https://github.com/pyca/cryptography/issues/2039
 def patch_crypto_be_discovery():
     """
     Monkey patches cryptography's backend detection.

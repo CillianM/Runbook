@@ -6,11 +6,12 @@ import connect_session
 class Ui_MainWindow(QtWidgets.QMainWindow):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.setFixedSize(800, 300)
+        MainWindow.setFixedSize(1200, 933)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.gridLayoutWidget = QtWidgets.QWidget(self.centralwidget)
-        self.gridLayoutWidget.setGeometry(QtCore.QRect(0, 0, 800, 300))
+        MainWindow.setStyleSheet("background-color: rgb(69,90,100);")
+        self.gridLayoutWidget.setGeometry(QtCore.QRect(127, -23, 900, 933))
         self.gridLayoutWidget.setObjectName("gridLayoutWidget")
         self.gridLayout = QtWidgets.QGridLayout(self.gridLayoutWidget)
         self.gridLayout.setContentsMargins(0, 0, 0, 0)
@@ -28,6 +29,19 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.troubleshootingButton.clicked.connect(self.initialiseTroubleshooting)
         self.gridLayout.addWidget(self.troubleshootingButton, 0, 2, 1, 1)
 
+        self.settingsButtonLayout = QtWidgets.QWidget(self.centralwidget)
+        self.settingsButtonLayout.setGeometry(QtCore.QRect(1100, 0, 100, 100))
+        self.settingsButtonLayout.setObjectName("settingsButtonLayout")
+        self.gridLayout_2 = QtWidgets.QGridLayout(self.settingsButtonLayout)
+        self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout_2.setObjectName("gridLayout_2")
+        self.settingsButton = ImageButton(QtGui.QPixmap("settings.png"))
+        self.settingsButton.setObjectName("settingsButton")
+        self.settingsButton.clicked.connect(self.initialiseSettings)
+        self.gridLayout_2.addWidget(self.settingsButton, 0, 0, 1, 1)
+
+        self.retranslateUi(MainWindow)
+
     def initialiseDeployment(self):
             dialog = QDialog()
             dialog.ui = connect_session.Ui_ConnectSession()
@@ -41,13 +55,17 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
     def initialiseTroubleshooting(self):
         print("Troubleshooting Module")
 
+    def initialiseSettings(self):
+        print("Settings Screen")
+
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "Launcher"))
         self.deploymentButton.setText(_translate("MainWindow", "Deployment Module"))
-        self.maintenenceButton.setText(_translate("MainWindow", "Maintenence Module"))
+        self.monitoringButton.setText(_translate("MainWindow", "Monitoring Module"))
         self.troubleshootingButton.setText(_translate("MainWindow", "Troubleshooting Module"))
+        self.settingsButton.setText(_translate("MainWindow", "Settings"))
 
 class ImageButton(QtWidgets.QAbstractButton):
     def __init__(self, pixmap, parent=None):
