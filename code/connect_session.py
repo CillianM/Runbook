@@ -4,6 +4,7 @@ import paramiko
 import time
 import xmltodict
 import threading
+import launcher
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
@@ -51,7 +52,7 @@ class Ui_ConnectSession(QtWidgets.QDialog):
         self.loginButton.setObjectName("loginButton")
         self.gridLayout.addWidget(self.loginButton, 3, 2, 1, 1)
 
-        self.loginButton.clicked.connect(self._login_btn_clicked)
+        self.loginButton.clicked.connect(self.backToLauncher)
         self.passwordField = QtWidgets.QLineEdit(self.gridWidget)
         self.passwordField.setEchoMode(QtWidgets.QLineEdit.Password)
         self.passwordField.setObjectName("passwordField")
@@ -100,6 +101,14 @@ class Ui_ConnectSession(QtWidgets.QDialog):
         self.label.setText(_translate("ConnectSession", "Connected"))
         self.addressLabel.setText(_translate("ConnectSession", "Address"))
         self.label_5.setText(_translate("ConnectSession", "Junos Version Check"))
+
+    def backToLauncher(self):
+        dialog = QDialog()
+        dialog.ui = launcher.Ui_MainWindow()
+        dialog.ui.setupUi(dialog)
+        dialog.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        dialog.exec_()
+        self.close()
 
     def callUpdateUI(self):
         self.updateUI(self.devices.currentText())
