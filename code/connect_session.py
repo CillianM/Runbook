@@ -8,10 +8,12 @@ import threading
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 class Ui_ConnectSession(QtWidgets.QDialog):
+    window = ""
     def setupUi(self, ConnectSession):
         self.stages = []
         self.messages = []
         self.index = 0
+        window = self
         super(Ui_ConnectSession, self).__init__()
         self.setObjectName("ConnectSession")
         self.setEnabled(True)
@@ -32,12 +34,14 @@ class Ui_ConnectSession(QtWidgets.QDialog):
         self.passwordLabel.setObjectName("passwordLabel")
         self.gridLayout.addWidget(self.passwordLabel, 2, 0, 1, 1)
 
+        self.deviceLabel = QtWidgets.QLabel(self.gridWidget)
+        self.deviceLabel.setObjectName("deviceLabel")
+        self.gridLayout.addWidget(self.deviceLabel, 4, 0, 1, 1)
 
         self.devices = QtWidgets.QComboBox(self.gridWidget)
         self.devices.setObjectName("devices")
         self.gridLayout.addWidget(self.devices, 4, 2, 1, 1)
-        #self.connect(self.devices, QtCore.SIGNAL("currentIndexChanged(const QString&)"), self.callUpdateUI)
-        #self.devices.activated.connect(self.callUpdateUI)
+        self.devices.activated.connect(self.callUpdateUI)
 
         self.label_2 = QtWidgets.QLabel(self.gridWidget)
         self.label_2.setEnabled(False)
@@ -81,12 +85,12 @@ class Ui_ConnectSession(QtWidgets.QDialog):
         self.label_5.setObjectName("label_5")
         self.gridLayout.addWidget(self.label_5, 9, 2, 1, 1)
 
-        self.retranslateUi(ConnectSession)
+        self.retranslateUi()
         QtCore.QMetaObject.connectSlotsByName(ConnectSession)
 
-    def retranslateUi(self, ConnectSession):
+    def retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
-        ConnectSession.setWindowTitle(_translate("ConnectSession", "Connnect Session"))
+        self.setWindowTitle(_translate("ConnectSession", "Connnect Session"))
         self.nameLabel.setText(_translate("ConnectSession", "Username"))
         self.passwordLabel.setText(_translate("ConnectSession", "Password"))
         self.label_2.setText(_translate("ConnectSession", "Serial Number Check"))
@@ -97,49 +101,49 @@ class Ui_ConnectSession(QtWidgets.QDialog):
         self.addressLabel.setText(_translate("ConnectSession", "Address"))
         self.label_5.setText(_translate("ConnectSession", "Junos Version Check"))
 
-        def callUpdateUI(self):
-            self.updateUI(self.devices.currentText())
+    def callUpdateUI(self):
+        self.updateUI(self.devices.currentText())
 
-        def updateUI(self, name):
-            for i in range(len(self.stages)):
-                if name in self.stages[i]:
-                    currentStage = self.stages[i]
-                    currentStage = currentStage[-1:]
-                    if (currentStage == "1"):
-                        self.updateLabels(True, False, False, False, False)
-                    elif (currentStage == "2"):
-                        self.updateLabels(True, True, False, False, False)
-                    elif (currentStage == "3"):
-                        self.updateLabels(True, True, True, False, False)
-                    elif (currentStage == "4"):
-                        self.updateLabels(True, True, True, True, False)
-                    elif (currentStage == "5"):
-                        self.updateLabels(True, True, True, True, True)
-                    self.textBrowser.clear()
-                    self.textBrowser.append(self.messages[i])
-                    break
+    def updateUI(self, name):
+        for i in range(len(self.stages)):
+            if name in self.stages[i]:
+                currentStage = self.stages[i]
+                currentStage = currentStage[-1:]
+                if (currentStage == "1"):
+                    self.updateLabels(True, False, False, False, False)
+                elif (currentStage == "2"):
+                    self.updateLabels(True, True, False, False, False)
+                elif (currentStage == "3"):
+                    self.updateLabels(True, True, True, False, False)
+                elif (currentStage == "4"):
+                    self.updateLabels(True, True, True, True, False)
+                elif (currentStage == "5"):
+                    self.updateLabels(True, True, True, True, True)
+                self.textBrowser.clear()
+                self.textBrowser.append(self.messages[i])
+                break
 
-        def updateLabels(self, b1, b2, b3, b4, b5):
-            self.label.setEnabled(b1)
-            self.label_2.setEnabled(b2)
-            self.label_3.setEnabled(b3)
-            self.label_4.setEnabled(b4)
-            self.label_5.setEnabled(b5)
+    def updateLabels(self, b1, b2, b3, b4, b5):
+        self.label.setEnabled(b1)
+        self.label_2.setEnabled(b2)
+        self.label_3.setEnabled(b3)
+        self.label_4.setEnabled(b4)
+        self.label_5.setEnabled(b5)
 
-        def retranslateUi(self):
-            _translate = QtCore.QCoreApplication.translate
+    def retranslateUi(self):
+        _translate = QtCore.QCoreApplication.translate
 
-            self.setWindowTitle(_translate("ConnectSession", "Connnect Session"))
-            self.nameLabel.setText(_translate("ConnectSession", "Username"))
-            self.passwordLabel.setText(_translate("ConnectSession", "Password"))
-            self.deviceLabel.setText(_translate("ConnectSession", "Device"))
-            self.label_2.setText(_translate("ConnectSession", "Serial Number Check"))
-            self.loginButton.setText(_translate("ConnectSession", "Login"))
-            self.label_3.setText(_translate("ConnectSession", "System Software Request"))
-            self.label_4.setText(_translate("ConnectSession", "Partitioning"))
-            self.label.setText(_translate("ConnectSession", "Connected"))
-            self.addressLabel.setText(_translate("ConnectSession", "Address"))
-            self.label_5.setText(_translate("ConnectSession", "Junos Version Check"))
+        self.setWindowTitle(_translate("ConnectSession", "Connnect Session"))
+        self.nameLabel.setText(_translate("ConnectSession", "Username"))
+        self.passwordLabel.setText(_translate("ConnectSession", "Password"))
+        self.deviceLabel.setText(_translate("ConnectSession", "Device"))
+        self.label_2.setText(_translate("ConnectSession", "Serial Number Check"))
+        self.loginButton.setText(_translate("ConnectSession", "Login"))
+        self.label_3.setText(_translate("ConnectSession", "System Software Request"))
+        self.label_4.setText(_translate("ConnectSession", "Partitioning"))
+        self.label.setText(_translate("ConnectSession", "Connected"))
+        self.addressLabel.setText(_translate("ConnectSession", "Address"))
+        self.label_5.setText(_translate("ConnectSession", "Junos Version Check"))
 
     def _login_btn_clicked(self):
         if len(self.nameField.text()) < 1 or len(self.addressField.text()) < 1:
@@ -158,66 +162,62 @@ class Ui_ConnectSession(QtWidgets.QDialog):
 
             self.index += 1
 
+    def updateText(window,textToDisplay,index):
+        window.textBrowser.append(textToDisplay)
+        window.messages[index] = window.messages[index] + textToDisplay
+
+    def updateProgress(window,specifiedLabel,bool):
+        specifiedLabel.setEnabled(bool)
+
+
 def _connect_session(username, hostname, password, window, index):
     try:
-        window.label.setEnabled(True)
+        window.updateProgress(window.label,True)
         # replace port colon with underscore for filename
         filename = username.replace(":", "_") + ".xml"
-        window.textBrowser.append("Filename will be " + filename + "\n")
-        window.messages[index] = window.messages[index] + "Filename will be " + filename + "\n"
+        window.updateText("Filename will be " + filename + "\n",index)
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(hostname, 22, username, password)
         term = ssh.invoke_shell()
-        window.textBrowser.append(username + ": " + "Connected\n")
-        window.messages[index] = window.messages[index] + username + ": " + "Connected\n"
+        window.updateText(username + ": " + "Connected\n", index)
         check(term, 5, "login", username, window, index)
         _login(term)
-        window.textBrowser.append(username + ": " + "Logged in\n")
-        window.messages[index] = window.messages[index] + username + "Logged in\n"
+        window.updateText(username + ": " + "Logged in\n", index)
         send_command(term, "set cli screen-length 0")
         window.stages[index] = username + " 2"
-        window.label_2.setEnabled(True)
+        window.updateProgress(window.label_2, True)
         xml = send_command(term, "show chassis hardware | display xml")
         xml = xml[37:(len(xml)) - 10]
         text_file = open(filename, "w")
         text_file.write(xml)
         text_file.close()
-        window.textBrowser.append(username + ": " + "Parsing xml for serial\n")
-        window.messages[index] = window.messages[index] + username + "Parsing xml for serial\n"
+        window.updateText(username + ": " + "Parsing xml for serial\n",index)
         parse_xml_serial(filename, username, window, index)
         window.stages[index] = username + " 3"
-        window.label_3.setEnabled(True)
+        window.updateProgress(window.label_3, True)
         send_command(term,
                      "request system software add \"ftp://10.179.236.10/junos-srxsme-15.1X49-D60.7-domestic.tgz\" no-copy no-validate reboot")
-        window.textBrowser.append(username + ": " + "Requested System software, waiting 2 minutes looped\n")
-        window.messages[index] = window.messages[
-                                     index] + username + "Requested System software, waiting 2 minutes looped\n"
+        window.updateText(username + ": " + "Requested System software, waiting 2 minutes looped\n", index)
         check(term, 120, "login", username, window, index)
         _login(term)
-        window.textBrowser.append(username + ": " + "Logged in again\n")
-        window.messages[index] = window.messages[index] + username + "Logged in again\n"
+        window.updateText(username + ": " + "Logged in again\n",index)
         window.stages[index] = username + " 4"
-        window.label_4.setEnabled(True)
+        window.updateProgress(window.label_4, True)
         send_command(term, "request system snapshot media internal slice alternate")
-        window.textBrowser.append(username + ": " + "Requested system snapshot, waiting 1 minute looped\n")
-        window.messages[index] = window.messages[
-                                     index] + username + "Requested system snapshot, waiting 1 minute looped\n"
+        window.updateText(username + ": " + "Requested system snapshot, waiting 1 minute looped\n",index)
         check(term, 60, "root", username, window, index)
-        window.textBrowser.append(username + ": " + "Request accepted, Partitioned snapshot\n")
-        window.messages[index] = window.messages[index] + username + "Request accepted, Partitioned snapshot\n"
+        window.updateText(username + ": " + "Request accepted, Partitioned snapshot\n", index)
         send_command(term, "set cli screen-length 0")
-        window.textBrowser.append(username + ": " + "Seraching Junos version\n")
-        window.messages[index] = window.messages[index] + username + "Seraching Junos version\n"
+        window.updateText(username + ": " + "Seraching Junos version\n", index)
         window.stages[index] = username + " 5"
-        window.label_5.setEnabled(True)
+        window.updateProgress(window.label_5, True)
         output = send_command(term, "show system snapshot media internal | display xml")
         output = output[51:(len(output)) - 10]
         text_file = open(filename, "w")
         text_file.write(output)
         text_file.close()
-        window.textBrowser.append(username + ": " + "Parsing Junos version\n")
-        window.messages[index] = window.messages[index] + username + "Parsing Junos version\n"
+        window.updateText(username + ": " + "Parsing Junos version\n", index)
         if (parse_xml_version(filename, term, username, window, index)):
             # send_command(term, "delete /yes")
             # send_command(term, "load set \"ftp://Administrator@10.179.236.10/config.conf\"")
@@ -226,32 +226,25 @@ def _connect_session(username, hostname, password, window, index):
             # send_command(term, "password")
             # send_command(term, "password")
             # send_command(term, "commit-and quit")
-            window.textBrowser.append(username + ": " + "Versions ok\n")
+            window.updateText(username + ": " + "Versions ok\n", index)
+            #window.textBrowser.append(username + ": " + "Versions ok\n")
             send_command(term, "request system halt in 0")
             time.sleep(2)
             send_command(term, "yes")
         else:
-            window.textBrowser.append(username + ": " + "Versions not configured properly\n")
-            window.messages[index] = window.messages[index] + username + "Versions not configured properly\n"
+            window.updateText(username + ": " + "Versions not configured properly\n", index)
 
-        window.textBrowser.append(username + ": " + "Shutting down\n")
-        window.messages[index] = window.messages[index] + username + "Shutting down\n"
+        window.updateText(username + ": " + "Shutting down\n", index)
         send_command(term, "request system halt in 0")
         time.sleep(2)
         send_command(term, "yes")
         ssh.close()
     except paramiko.ssh_exception.BadHostKeyException:
-        window.textBrowser.append("Host Key Error! Server’s host key could not be verified")
-        window.messages[index] = window.messages[
-                                     index] + username + "Host Key Error! Server’s host key could not be verified"
+        window.updateText("Host Key Error! Server’s host key could not be verified", index)
     except paramiko.ssh_exception.AuthenticationException:
-        window.textBrowser.append("Authentication Error! Authentication failed, Check your details and try again")
-        window.messages[index] = window.messages[
-                                     index] + username + "Authentication Error! Authentication failed, Check your details and try again"
+        window.updateText("Authentication Error! Authentication failed, Check your details and try again", index)
     except paramiko.ssh_exception.SSHException:
-        window.textBrowser.append("Unknown Error! Unknown error connecting or establishing an SSH session")
-        window.messages[index] = window.messages[
-                                     index] + username + "Authentication Error! Authentication failed, Check your details and try again"
+        window.updateText("Unknown Error! Unknown error connecting or establishing an SSH session", index)
 
 def updateUI(devicename):
     print(devicename)
