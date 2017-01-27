@@ -1,3 +1,4 @@
+import datetime
 import random
 import sys
 import threading
@@ -13,6 +14,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
 from ftplib import *
+import pyodbc
 
 #Styling for progress bar
 DEFAULT_STYLE = """
@@ -25,49 +27,51 @@ background-color: rgb(69,90,100);
 class windowLauncher(QWidget):
     def __init__(self):
         super(windowLauncher, self).__init__()
+        #main window properties
         self.setWindowTitle('Network Deployment Automation Maintenance Tool')
         self.setFixedSize(900, 700)
 
+        #global boolean to tell if programme is doing something
         self.blocked = False
+
+        #global UI widgets
         self.launcher = QWidget()
         self.deployment = QWidget()
         self.settings = QWidget()
         self.troubleshooting = QWidget()
 
+        #keep track of any threads during runtime, avoid cleanup
         self.threads = []
 
+        #Set up stack of UI
         self.Stack = QStackedWidget(self)
         self.Stack.addWidget(self.launcher)
         self.Stack.addWidget(self.deployment)
         self.Stack.addWidget(self.settings)
         self.Stack.addWidget(self.troubleshooting)
 
+        #set the main window to the stack
         mainLayout = QGridLayout(self)
         mainLayout.addWidget(self.Stack)
 
+        #set window style and layout
         self.setStyleSheet(DEFAULT_STYLE)
         self.setLayout(mainLayout)
 
         # check if settings file is setup
         if not os.path.isfile('./Settings.xml'):
-            self.Stack.setCurrentIndex(2)
+            self.Stack.setCurrentIndex(2) #if it's not send them to settings page
         else:
-            self.Stack.setCurrentIndex(0)
+            self.Stack.setCurrentIndex(0) #if there is a file we put them in the launcher
 
+        ##appropriate UI layouts and methods
         self.launcherUI()
         self.deploymentUI()
         self.settingsUI()
         self.troubleshootingUI()
 
+        #finally show it all
         self.show()
-
-
-
-
-
-
-
-
 
     def launcherUI(self):
 
@@ -357,11 +361,13 @@ class windowLauncher(QWidget):
 
         self.troubleshooting.setLayout(verticalContainer)
 
+    #get mouse position from click event
     def getPos(self, event):
         x = event.pos().x()
         y = event.pos().y()
         print(str(x) + " " +  str(y))
 
+    #update the network map image with a new scan
     def displayImage(self):
         if not self.blocked:
             self.blocked = True
@@ -373,6 +379,7 @@ class windowLauncher(QWidget):
         else:
             QMessageBox.information(self, "Scan Running", "You're already running a network scan")
 
+    #called from thread, updates the progress bar or wraps up and sets new image
     def updateScannerProgress(self, percentage):
         if(percentage == 101):
             dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -384,9 +391,6 @@ class windowLauncher(QWidget):
         else:
             self.scannerProgressBar.setValue(percentage)
 
-
-        #0 188 212
-    #96 125 139
     def deploymentUI(self):
         verticalContainer = QVBoxLayout(self)
         verticalContainer.setObjectName("verticalContainer")
@@ -414,7 +418,7 @@ class windowLauncher(QWidget):
         loginFrame = QFrame()
         loginDetailsLayout = QGridLayout()
         loginDetailsLayout.setObjectName("loginDetailsLayout")
-        loginDetailsLayout.setVerticalSpacing(50)
+        loginDetailsLayout.setVerticalSpacing(30)
         portNoLayout = QGridLayout()
         portNoLayout.setObjectName("portNoLayout")
         label = QLabel("   TO   ")
@@ -455,16 +459,18 @@ class windowLauncher(QWidget):
         self.consolePasswordField.setObjectName("consolePasswordField")
         loginDetailsLayout.addWidget(self.consolePasswordField, 2, 0, 1, 1)
 
-        self.ftpPasswordField = QLineEdit(self)
-        self.ftpPasswordField.setPlaceholderText("FTP Server Password")
-        self.ftpPasswordField.setEchoMode(QLineEdit.Password)
-        self.ftpPasswordField.setStyleSheet("background-color: rgb(255,255,255);")
-        self.ftpPasswordField.setObjectName("ftpPasswordField")
-        loginDetailsLayout.addWidget(self.ftpPasswordField, 3, 0, 1, 1)
+        self.dbPasswordField = QLineEdit(self)
+        self.dbPasswordField.setPlaceholderText("Database Server Password")
+        self.dbPasswordField.setEchoMode(QLineEdit.Password)
+        self.dbPasswordField.setStyleSheet("background-color: rgb(255,255,255);")
+        self.dbPasswordField.setObjectName("dbPasswordField")
+        loginDetailsLayout.addWidget(self.dbPasswordField, 3, 0, 1, 1)
         
         self.osVersions = QComboBox(self)
         self.osVersions.setObjectName("self.osVersions")
         self.osVersions.setStyleSheet("background-color: rgb(255,255,255);")
+
+        #Connect to ftp and get files for updating os
         self.osFiles = self.getFiles(".tgz")
         self.osFiles.reverse()
         for index in range(len(self.osFiles)):
@@ -476,7 +482,7 @@ class windowLauncher(QWidget):
         configurationRangeFrame.setContentsMargins(10,1,10,1)
         configurationRangeLayout = QVBoxLayout()
         configurationRangeLayout.setObjectName("configurationRangeLayout")
-        #configurationRangeLayout.setSpacing(10)
+        configurationRangeLayout.setSpacing(10)
         configurationRangeHeading = QLabel("Inital Configuration Range(Optional)")
         configurationRangeHeading.setObjectName("configurationRangeHeading")
         configurationRangeHeading.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
@@ -490,6 +496,7 @@ class windowLauncher(QWidget):
         self.toConfiguration.setObjectName("toConfiguration")
         self.toConfiguration.setStyleSheet("background-color: rgb(255,255,255);")
 
+        #connect to ftp and get any files from ftp
         self.confFiles = self.getFiles(".conf")
         self.confFiles.reverse()
         for index in range(len(self.confFiles)):
@@ -599,12 +606,21 @@ class windowLauncher(QWidget):
     def getFiles(self,extension):
 
         try:
-            ftpAddress = self.getFtpAddress()
-            ftpAddress = "localhost"
+            #anonymous login so no password
+            if("conf" in extension):
+                #set the ftp path to the config files location
+                path = getIniConfPath()
+            else:
+                #set the ftp path to the os files location
+                path = getOsPath()
+            ftpAddress = self.getFtpAddress() + "/" + path
             ftp = FTP(ftpAddress)
-            ftp.login('filipSucksCock', 'password')
+
+
+            #get list of all the files in the directory
             files = ftp.nlst()
             actualFiles = []
+            #add all the files with the appropriate extension to the list
             for index in range(len(files)):
                 if (extension in files[index]):
                     actualFiles.append(files[index])
@@ -635,16 +651,16 @@ class windowLauncher(QWidget):
             QMessageBox.information(self, "Not Enough Configs", "Please ensure there are enough config files for each specified device")
             return
 
-
-        #connect_session.patch_crypto_be_discovery()
+        #apply patch
+        patch_crypto_be_discovery()
         configurationsToUse = []
         for index in range(fromConf,toConf+1):
             configurationsToUse.append(self.confFiles[index])
+        
         willBackup = self.willCloneToBackup.isChecked()
-        ftpAddress = self.getFtpAddress()
-        consoleAddress = self.getConsoleAddress()
-        consoleUsername = self.getConsoleName()
-        password = self.passwordField.text()
+        OsFile = self.osVersions.currentText()
+        consolePassword = self.consolePasswordField.text()
+        databasePassword = self.dbPasswordField.text()
         self.progressBar.setValue(0)
 
         if(willBackup):
@@ -658,16 +674,17 @@ class windowLauncher(QWidget):
             print("Updating device at port " + str(toPort))
             thread = Updater(self)
             thread.trigger.connect(self.updateProgress)
-            thread.setup(toPort,ftpAddress,consoleUsername,consoleAddress,password,configurationsToUse[confIndex],willBackup,True)
+            thread.setup(toPort,consolePassword,databasePassword,OsFile,configurationsToUse[confIndex],willBackup,True)
             thread.start()
             self.threads.append(thread)
 
         else:
+            confIndex = 0
             for index in range(fromPort,toPort):
                 print("Updating device at port " + str(toPort))
                 thread = Updater(self)
                 thread.trigger.connect(self.updateProgress)
-                thread.setup(index,ftpAddress,consoleUsername,consoleAddress,password,configurationsToUse[confIndex],willBackup,False)
+                thread.setup(index,consolePassword,databasePassword,OsFile,configurationsToUse[confIndex],willBackup,False)
                 thread.start()
                 self.threads.append(thread)
                 confIndex += 1
@@ -675,7 +692,7 @@ class windowLauncher(QWidget):
             #make final thread the one to update GUI
             thread = Updater(self)
             thread.trigger.connect(self.updateProgress)
-            thread.setup(toPort,ftpAddress,consoleUsername,consoleAddress,password,configurationsToUse[confIndex],willBackup,True)
+            thread.setup(toPort,consolePassword,databasePassword,OsFile,configurationsToUse[confIndex],willBackup,True)
             thread.start()
             self.threads.append(thread)
 
@@ -701,7 +718,7 @@ class windowLauncher(QWidget):
             self.deploymentSuccessful.setStyleSheet("color:white; font-size:16px;")
 
     def fieldsEmpty(self):
-        if(len(self.fromPortNo.text()) < 1 or len(self.toPortNo.text()) < 1 or len(self.passwordField.text()) < 1):
+        if(len(self.fromPortNo.text()) < 1 or len(self.toPortNo.text()) < 1 or len(self.consolePasswordField.text()) < 1):
             return True
         else:
             return False
@@ -804,37 +821,6 @@ class windowLauncher(QWidget):
     def display(self, i):
         self.Stack.setCurrentIndex(i)
 
-    def getFtpAddress(self):
-        try:
-            with open("Settings.xml") as file:
-                settingsDict = xmltodict.parse(file.read())
-            return settingsDict['Settings']['Ftp-Info']['ftpServerAddress']
-        except:
-            return ""
-
-    def getFtpName(self):
-        try:
-            with open("Settings.xml") as file:
-                settingsDict = xmltodict.parse(file.read())
-            return settingsDict['Settings']['Ftp-Info']['ftpUsername']
-        except:
-            return ""
-
-    def getConsoleName(self):
-        try:
-            with open("Settings.xml") as file:
-                settingsDict = xmltodict.parse(file.read())
-            return settingsDict['Settings']['Ftp-Info']['consoleUsername']
-        except:
-            return ""
-
-    def getConsoleAddress(self):
-        try:
-            with open("Settings.xml") as file:
-                settingsDict = xmltodict.parse(file.read())
-            return settingsDict['Settings']['Console-Info']['consoleAddress']
-        except:
-            return ""
 
 class NetworkScanner(QThread):
     trigger = pyqtSignal(int)
@@ -855,85 +841,103 @@ class Updater(QThread):
     def __init__(self, parent=None):
         super(Updater, self).__init__(parent)
 
-    def setup(self, thread_no,ftpAddress,consoleUsername,consoleAddress,password,configFile,willClone,isGUIUpdater):
+    def setup(self, thread_no,consolePassword,databsePassword,OsFile,configFile,willClone,isGUIUpdater):
         self.thread_no = thread_no
-        self.ftpAddress = ftpAddress
-        self.consoleUsername = consoleUsername
-        self.consoleAddress = consoleAddress
-        self.password = password
+        self.databsePassword = databsePassword
+        self.consolePassword = consolePassword
         self.willClone = willClone
         self.configFile = configFile
         self.isGUIUpdater = isGUIUpdater
+        self.OsFile = OsFile
 
     def run(self):
-        self.connect_session(self.thread_no,self.consoleUsername,self.consoleAddress,self.password,self.ftpAddress,self.configFile,self.willClone,self.isGUIUpdater)
+        self.connect_session(self.thread_no,self.password,self.databsePassword,self.OsFile,self.configFile,self.willClone,self.isGUIUpdater)
 
 
-def connect_session(self,portNo, username, hostname, password,ftpAddress,configFile,willClone,updateGui):
+def connect_session(self,portNo, consolePassword,databasePassword,OsFile,configFile,willClone,updateGui):
     try:
         # replace port colon with underscore for filename
+        ftpAddress = getFtpAddress()
+        osFile = getOsPath() + "/" + OsFile
+        confPath = getIniConfPath() + "/" + configFile
+        username = getConsoleName()
+        hostname = username + ":" + getConsoleAddress()
         filename = username + ":" + str(portNo) + ".xml"
+        print(ftpAddress)
+        print(osFile)
+        print(confPath)
 
+        hostname = str(portNo)+":"+hostname
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(hostname, 22, username, password)
+        ssh.connect(hostname, 22, username, consolePassword)
         term = ssh.invoke_shell()
         if(updateGui):
             self.trigger.emit(11)
-        connect_session.check(term, 5, "login")
-        connect_session._login(term)
+        check(term, 5, "login")
+        _login(term)
         if (updateGui):
             self.trigger.emit(22)
-        connect_session.send_command(term, "set cli screen-length 0")
+        send_command(term, "set cli screen-length 0")
+        originalVersion = send_command(term, "show system version")
 
-        xml = connect_session.send_command(term, "show chassis hardware | display xml")
+
+        xml = send_command(term, "show chassis hardware | display xml")
         xml = xml[37:(len(xml)) - 10]
         text_file = open(filename, "w")
         text_file.write(xml)
         text_file.close()
         # parsing for serial
-        connect_session.parse_xml_serial(filename, username)
+        serialNo = parse_xml_serial(filename, username)
+        #push serial to database
+        pushSerial(getDatabaseAddress(),getDatabaseUsername(),databasePassword,serialNo,confPath)
+
         if (updateGui):
             self.trigger.emit(44)
-        connect_session.send_command(term,"request system software add \"" + ftpAddress + "\" no-copy no-validate reboot")
+        send_command(term,"request system software add \"" + ftpAddress + "\\" + osFile + "\" no-copy no-validate reboot")
 
         if (updateGui):
             self.trigger.emit(55)
-        connect_session.check(term, 120, "login")
-        connect_session._login(term)
+        check(term, 120, "login")
+        _login(term)
 
         if (updateGui):
             self.trigger.emit(66)
-        connect_session.send_command(term, "request system snapshot media internal slice alternate")
+        if(willClone):
+            send_command(term, "request system snapshot media internal slice alternate")
         # requested system snapshot
-        connect_session.check(term, 60, "root")
+        check(term, 60, "root")
         # partitioned snapshot
-        connect_session.send_command(term, "set cli screen-length 0")
+        send_command(term, "set cli screen-length 0")
         # junos version check
-        output = connect_session.send_command(term, "show system snapshot media internal | display xml")
+        output = send_command(term, "show system snapshot media internal | display xml")
         output = output[51:(len(output)) - 10]
         text_file = open(filename, "w")
         text_file.write(output)
         text_file.close()
+        updatedVersion = send_command(term, "show system version")
         if (updateGui):
             self.trigger.emit(77)
-        if (connect_session.parse_xml_version(filename, term)):
-            connect_session.send_command(term, "delete /yes")
-            connect_session.send_command(term, "load set \""+ ftpAddress  + "\"" + configFile)
-            connect_session.send_command(term, "request system halt in 0")
+        if not updatedVersion == originalVersion:
+            send_command(term, "configure")
+            send_command(term, "delete /yes")
+            send_command(term, "load set \""+ ftpAddress  + "\"" + confPath)
+            send_command(term, "commit-and-quit")
+            send_command(term, "request system halt in 0")
             time.sleep(2)
-            connect_session.send_command(term, "yes")
+            send_command(term, "yes")
         else:
-            QMessageBox.information(self, "Versions Not Configured", "OS versions not configured correctly")
+            QMessageBox.information(self, "Error updating SerialNo: " + serialNo, "OS wasn't updated correctly, Not applying config, Shutting down")
 
         if (updateGui):
             self.trigger.emit(88)
-        connect_session.send_command(term, "request system halt in 0")
+        send_command(term, "request system halt in 0")
         time.sleep(2)
-        connect_session.send_command(term, "yes")
+        send_command(term, "yes")
         ssh.close()
         if (updateGui):
             self.trigger.emit(100)
+
     except paramiko.ssh_exception.BadHostKeyException:
         QMessageBox.information(self, "Host Key Error!", "Server’s host key could not be verified")
     except paramiko.ssh_exception.AuthenticationException:
@@ -942,6 +946,156 @@ def connect_session(self,portNo, username, hostname, password,ftpAddress,configF
     except paramiko.ssh_exception.SSHException:
         QMessageBox.information(self, "Unknown Error!", "Unknown error connecting or establishing an SSH session")
 
+#Credit to exvito for patch
+#link: https://github.com/pyca/cryptography/issues/2039
+def patch_crypto_be_discovery():
+    """
+    Monkey patches cryptography's backend detection.
+    Objective: support pyinstaller freezing.
+    """
+    from cryptography.hazmat import backends
+
+    try:
+        from cryptography.hazmat.backends.commoncrypto.backend import backend as be_cc
+    except ImportError:
+        be_cc = None
+
+    try:
+        from cryptography.hazmat.backends.openssl.backend import backend as be_ossl
+    except ImportError:
+        be_ossl = None
+
+    backends._available_backends_list = [
+        be for be in (be_cc, be_ossl) if be is not None
+        ]
+
+def pushSerial(dbAddress,dbUsername,dbPassword,serialNo,configFile):
+    cnxn = pyodbc.connect('DRIVER={SQL Server};SERVER='+dbAddress+';DATABASE=runbook;UID='+dbUsername+';PWD='+dbPassword)
+    cursor = cnxn.cursor()
+    time = datetime.datetime.fromtimestamp(time.time()).strftime('%H:%M %d-%m-%y')
+    configTable = getDatabaseConfTable()
+    cursor.execute("insert into configTable(serial,user,path,timestamp,isprimary) values (serialNo,dbUsername,configFile,time,1)")
+    cnxn.commit()
+
+def send_command(term, cmd):
+    term.send(cmd + "\n")
+    time.sleep(3)
+    output = term.recv(2024)
+    # Convert byte output to string
+    fOutput = output.decode("utf-8")
+    # print(fOutput)
+    return fOutput
+
+def parse_xml_serial(xml, username):
+    try:
+        with open(xml) as fd:
+            mydict = xmltodict.parse(fd.read())
+        serial = "".format(mydict['rpc-reply']['chassis-inventory']['chassis']['serial-number'])
+        return serial
+
+    except:
+        return ""
+
+def check(term, timeToWait, promptToWaitFor):
+    timesChecked = 1
+    ready = False
+    while (not ready):
+        time.sleep(timeToWait)
+        answer = send_command(term, "")
+        # print(answer)
+        if (promptToWaitFor in answer):
+            ready = True
+        timesChecked = timesChecked + 1
+
+def _login(term):
+    send_command(term, "root")
+    send_command(term, "")
+    send_command(term, "cli")
+
+def getFtpAddress():
+    try:
+        with open("Settings.xml") as file:
+            settingsDict = xmltodict.parse(file.read())
+        return settingsDict['Settings']['Ftp-Info']['ftpServerAddress']
+    except:
+        return ""
+
+
+def getFtpName():
+    try:
+        with open("Settings.xml") as file:
+            settingsDict = xmltodict.parse(file.read())
+        return settingsDict['Settings']['Ftp-Info']['ftpUsername']
+    except:
+        return ""
+
+def getOsPath():
+    try:
+        with open("Settings.xml") as file:
+            settingsDict = xmltodict.parse(file.read())
+        return settingsDict['Settings']['Ftp-Info']['ftpOsPath']
+    except:
+        return ""
+
+def getConfPath():
+    try:
+        with open("Settings.xml") as file:
+            settingsDict = xmltodict.parse(file.read())
+        return settingsDict['Settings']['Ftp-Info']['ftpConfPath']
+    except:
+        return ""
+
+def getIniConfPath():
+    try:
+        with open("Settings.xml") as file:
+            settingsDict = xmltodict.parse(file.read())
+        return settingsDict['Settings']['Ftp-Info']['ftpIniConfPath']
+    except:
+        return ""
+
+
+def getConsoleName():
+    try:
+        with open("Settings.xml") as file:
+            settingsDict = xmltodict.parse(file.read())
+        return settingsDict['Settings']['Ftp-Info']['consoleUsername']
+    except:
+        return ""
+
+
+def getConsoleAddress():
+    try:
+        with open("Settings.xml") as file:
+            settingsDict = xmltodict.parse(file.read())
+        return settingsDict['Settings']['Console-Info']['consoleAddress']
+    except:
+        return ""
+
+
+def getDatabaseAddress():
+    try:
+        with open("Settings.xml") as file:
+            settingsDict = xmltodict.parse(file.read())
+        return settingsDict['Settings']['Console-Info']['databseAddress']
+    except:
+        return ""
+
+
+def getDatabaseUsername():
+    try:
+        with open("Settings.xml") as file:
+            settingsDict = xmltodict.parse(file.read())
+        return settingsDict['Settings']['Database-Info']['databseUsername']
+    except:
+        return ""
+
+def getDatabaseConfTable():
+    try:
+        with open("Settings.xml") as file:
+            settingsDict = xmltodict.parse(file.read())
+        return settingsDict['Settings']['Database-Info']['initConfigTable']
+    except:
+        return ""
 
 class ImageButton(QAbstractButton):
     def __init__(self, pixmap, parent=None):
