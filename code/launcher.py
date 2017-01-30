@@ -222,14 +222,10 @@ class windowLauncher(QWidget):
         self.databseUsername.setPlaceholderText("Username")
         self.databseUsername.setStyleSheet("background-color: rgb(255,255,255);")
         databaseConfigLayout.addWidget(self.databseUsername)
-        self.initConfigTable = QLineEdit()
-        self.initConfigTable.setPlaceholderText("Init config table")
-        self.initConfigTable.setStyleSheet("background-color: rgb(255,255,255);")
-        databaseConfigLayout.addWidget(self.initConfigTable)
-        self.versionControlTable = QLineEdit()
-        self.versionControlTable.setPlaceholderText("Version Control Table")
-        self.versionControlTable.setStyleSheet("background-color: rgb(255,255,255);")
-        databaseConfigLayout.addWidget(self.versionControlTable)
+        self.configTable = QLineEdit()
+        self.configTable.setPlaceholderText("Configuration Table")
+        self.configTable.setStyleSheet("background-color: rgb(255,255,255);")
+        databaseConfigLayout.addWidget(self.configTable)
 
         databaseConfigLabel1 = QLabel("*Ensure you input correct table names from your database to enable use of the deployment and maintenance module")
         databaseConfigLabel1.setWordWrap(True);
@@ -606,7 +602,12 @@ class windowLauncher(QWidget):
             else:
                 # set the ftp path to the os files location
                 path = getOsPath()
-            ftp = FTP(getFtpAddress(), '21')
+            address = getFtpAddress()
+            #don't need to specifiy port in localhost
+            if 'localhost' in address:
+                ftp = FTP(address)
+            else:
+                ftp = FTP(address, '21')
             ftp.login('anonymous', '')
             ftp.cwd(path)
 
@@ -759,8 +760,7 @@ class windowLauncher(QWidget):
 
             self.databseAddress.setText(settingsDict['Settings']['Database-Info']['databseAddress'])
             self.databseUsername.setText(settingsDict['Settings']['Database-Info']['databseUsername'])
-            self.initConfigTable.setText(settingsDict['Settings']['Database-Info']['initConfigTable'])
-            self.versionControlTable.setText(settingsDict['Settings']['Database-Info']['versionControlTable'])
+            self.configTable.setText(settingsDict['Settings']['Database-Info']['configTable'])
             file.close()
             return True
         except:
@@ -778,8 +778,7 @@ class windowLauncher(QWidget):
                 or len(self.settingsToPort.text()) < 1 \
                 or len(self.databseAddress.text()) < 1 \
                 or len(self.databseUsername.text()) < 1 \
-                or len(self.initConfigTable.text()) < 1 \
-                or len(self.versionControlTable.text()) < 1:
+                or len(self.configTable.text()) < 1:
             return False
         else:
             return True
@@ -802,8 +801,7 @@ class windowLauncher(QWidget):
                     'settingsToPort':self.settingsToPort.text()},
                    'Database-Info':{'databseAddress':self.databseAddress.text(),
                     'databseUsername':self.databseUsername.text(),
-                    'initConfigTable':self.initConfigTable.text(),
-                    'versionControlTable':self.versionControlTable.text()}}}
+                    'configTable':self.configTable.text()}}}
             xml = xmltodict.unparse(dict,pretty=True)
             settings_file.write(xml)
             settings_file.close()
