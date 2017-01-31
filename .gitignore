@@ -3,4 +3,7 @@
 
 .idea
 Settings.xml
+network_path.png
 *.pyc
+code/Settings.xml
+code/__pycache__/
