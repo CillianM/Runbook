@@ -362,11 +362,11 @@ def beginDeployment(deploymentWindow):
             return
 
         # make sure configurations are the same amount as devices being updated
-        fromConf = deploymentWindow.fromConfiguration.deploymentWindowIndex()
-        toConf = deploymentWindow.toConfiguration.deploymentWindowIndex()
+        fromConf = deploymentWindow.fromConfiguration.currentIndex()
+        toConf = deploymentWindow.toConfiguration.currentIndex()
         fromPort = int(deploymentWindow.fromPortNo.text())
         toPort = int(deploymentWindow.toPortNo.text())
-        if (not (toConf > fromConf)):
+        if (not (toConf >= fromConf)):
             msg.messageWindow("Config List Error","Please ensure your starting configuration is before your final configuration", True)
             return
         if (not ((toConf - fromConf) + 1 == (toPort - fromPort) + 1)):
@@ -380,7 +380,7 @@ def beginDeployment(deploymentWindow):
             configurationsToUse.append(deploymentWindow.confFiles[index])
 
         willBackup = deploymentWindow.willCloneToBackup.isChecked()
-        OsFile = deploymentWindow.osVersions.deploymentWindowText()
+        OsFile = deploymentWindow.osVersions.currentText()
         consolePassword = deploymentWindow.consolePasswordField.text()
         databasePassword = deploymentWindow.dbPasswordField.text()
         deploymentWindow.progressBar.setValue(0)
@@ -388,7 +388,7 @@ def beginDeployment(deploymentWindow):
         confIndex = fromConf
         # check to see how many devices we're updating
         if (toPort - fromPort + 1 == 1):
-            thread = Updater(deploymentWindow)
+            thread = Updater(deploymentWindow.window)
             thread.trigger.connect(deploymentWindow.updateProgress)
             thread.setup(toPort, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex], willBackup,
                          True)
@@ -398,7 +398,7 @@ def beginDeployment(deploymentWindow):
         else:
             confIndex = 0
             for index in range(fromPort, toPort):
-                thread = Updater(deploymentWindow)
+                thread = Updater(deploymentWindow.window)
                 thread.trigger.connect(deploymentWindow.updateProgress)
                 thread.setup(index, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex],
                              willBackup,
@@ -408,7 +408,6 @@ def beginDeployment(deploymentWindow):
                 confIndex += 1
 
             # make final thread the one to update GUI
-            thread = Updater(deploymentWindow)
             thread.trigger.connect(deploymentWindow.updateProgress)
             thread.setup(toPort, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex], willBackup,
                          True)
@@ -491,10 +490,9 @@ class Updater(QThread):
             osFile = getOsPath() + OsFile
             confPath = getIniConfPath() + configFile
             username = getConsoleName()
-            hostname = username + ":" + getConsoleAddress()
+            hostname = username + ":" + str(portNo) + "@" + getConsoleAddress()
             filename = username + ":" + str(portNo) + ".xml"
 
-            hostname = str(portNo)+":"+hostname
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh.connect(hostname, 22, username, consolePassword)
