@@ -3,11 +3,16 @@ import ipaddress
 import socket
 import platform
 import sys
+import threading
 import uuid
 
 #Parse the arp table for the appropriate mac address
 import networkx as nx
-import matplotlib.pyplot as plt
+from PyQt5.QtCore import QThread
+from PyQt5.QtCore import pyqtSignal
+
+graphLocation = None
+window = None
 
 def find(s, ch):
     list =  [i for i, ltr in enumerate(s) if ltr == ch]
@@ -31,6 +36,10 @@ def getIpAddress():
     return mySocket.getsockname()[0]
 
 def scanNetwork(self):
+    global window
+    window = self
+    self.percentage = 0
+    threads = []
     currentOS = platform.system()
 
     #Convert mac address from decimal to hex and add colons for readibility
@@ -48,33 +57,43 @@ def scanNetwork(self):
     allHosts = list(ipNetwork)
 
     liveIPs = [myIpAddress]
+    length = len(allHosts)
 
-    for i in range(len(allHosts)):
-        currentIP = str(allHosts[i])
-        if(currentIP != myIpAddress):
-            #Windows
-            if("Windows" in currentOS):
-                output = subprocess.Popen(['ping', '-n', '1', '-w', '500', currentIP], stdout=subprocess.PIPE).communicate()[0].decode('utf-8')
+    chunkOne = []
+    chunkTwo = []
+    chunkThree = []
+    chunkFour = []
 
-                if "Reply from" in output:
-                    liveIPs.append(currentIP)
+    try:
+        thread1 = SubScanner(1, currentOS,myIpAddress, allHosts[0:int((length/4) +1)],chunkOne)
+        thread1.start()
 
-            #Linux
-            if ("Linux" in currentOS):
-                output = subprocess.Popen(['ping', '-c', '1', '-w', '250', str(allHosts[i])], stdout=subprocess.PIPE).communicate()[0].decode('utf-8')
+        thread2 = SubScanner(2, currentOS, myIpAddress, allHosts[int((length/4) +1):int((length / 2) + 1)], chunkTwo)
+        thread2.start()
 
-                if " 0% packet loss" in output:
-                    liveIPs.append(currentIP)
+        thread3 = SubScanner(3, currentOS, myIpAddress, allHosts[int((length / 2) + 1):int((length / 4) + 1) * 3], chunkThree)
+        thread3.start()
 
-            #Mac OS
-            if ("Darwin" in currentOS):
-                output = subprocess.Popen(['ping', '-c', '1', '-W', '500', str(allHosts[i])], stdout=subprocess.PIPE).communicate()[0].decode('utf-8')
+        thread4 = SubScanner(4, currentOS, myIpAddress, allHosts[int((length / 4) + 1) * 3:length], chunkFour)
+        thread4.start()
 
-                if " 0.0% packet loss" in output:
-                    liveIPs.append(currentIP)
+        thread1.join()
+        self.trigger.emit(25)
+        thread2.join()
+        self.trigger.emit(50)
+        thread3.join()
+        self.trigger.emit(75)
+        thread4.join()
+    except Exception as e: print(str(e))
 
-        currentPercentage = (i/len(allHosts)) * 100
-        self.trigger.emit(currentPercentage)
+
+
+    liveIPs.extend(chunkOne)
+
+    liveIPs.extend(chunkTwo)
+    liveIPs.extend(chunkThree)
+    liveIPs.extend(chunkFour)
+
 
     #Just make sure 100 is printed at the end due to decimals and rounding
     self.trigger.emit(100)
@@ -100,11 +119,51 @@ def scanNetwork(self):
         else:
             macAddr = myMacAddress
 
-
-    nx.draw_networkx(G)
-    plt.axis('off')
-    plt.autoscale()
-    plt.savefig("network_path.png", bbox_inches='tight') # save as png
+    global graphLocation
+    graphLocation = G
     self.trigger.emit(101)
+
+class SubScanner(threading.Thread):
+    trigger = pyqtSignal(int)
+
+    def __init__(self, thread_no, currentOS,myIpAddress, listToScan,listToReturn):
+        threading.Thread.__init__(self)
+        self.thread_no = thread_no
+        self.currentOS = currentOS
+        self.myIpAddress = myIpAddress
+        self.listToScan = listToScan
+        self.listToReturn = listToReturn
+
+    def run(self):
+        for i in range(len(self.listToScan)):
+            currentIP = str(self.listToScan[i])
+            if (currentIP != self.myIpAddress):
+                # Windows
+                if ("Windows" in self.currentOS):
+                    output = \
+                    subprocess.Popen(['ping', '-n', '1', '-w', '500', currentIP], stdout=subprocess.PIPE).communicate()[
+                        0].decode('utf-8')
+
+                    if "Reply from" in output:
+                        self.listToReturn.append(currentIP)
+
+                # Linux
+                if ("Linux" in self.currentOS):
+                    output = subprocess.Popen(['ping', '-c', '1', '-w', '250', str(self.listToScan[i])],
+                                              stdout=subprocess.PIPE).communicate()[0].decode('utf-8')
+
+                    if " 0% packet loss" in output:
+                        self.listToReturn.append(currentIP)
+
+                # Mac OS
+                if ("Darwin" in self.currentOS):
+                    output = subprocess.Popen(['ping', '-c', '1', '-W', '500', str(self.listToScan[i])],
+                                              stdout=subprocess.PIPE).communicate()[0].decode('utf-8')
+
+                    if " 0.0% packet loss" in output:
+                        self.listToReturn.append(currentIP)
+
+            currentPercentage = (i / len(self.listToScan)) * 25
+
 
 

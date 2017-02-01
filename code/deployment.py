@@ -14,10 +14,17 @@ import time
 from imagebutton import ImageButton
 import messagewindow as msg
 
+#global variable to save window state
+deploymentWindow = None
+
 class DeploymentModule:
     def __init__(self, window, layout):
         self.layout = layout
         self.window = window
+        self.blocked = False
+        self.threads = []
+        global deploymentWindow
+        deploymentWindow = self
 
 
     def deploymentUI(self, window):
@@ -43,7 +50,7 @@ class DeploymentModule:
             topBarLayout.addWidget(backButton)
             refreshButton = ImageButton(QPixmap("refresh.png"))
             refreshButton.setObjectName("refreshButton")
-            refreshButton.clicked.connect(window.refreshPage)
+            refreshButton.clicked.connect(self.refreshPage)
             refreshButton.setStyleSheet("height: 50px;")
             topBarLayout.addWidget(refreshButton)
 
@@ -86,7 +93,7 @@ class DeploymentModule:
             deploymentButton = QPushButton("Begin Deployment")
             deploymentButton.setObjectName("deploymentButton")
             deploymentButton.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
-            deploymentButton.clicked.connect(self.beginDeployment)
+            deploymentButton.clicked.connect(startDeployment)
             loginDetailsLayout.addWidget(deploymentButton, 6, 0, 1, 1)
 
             self.consolePasswordField.setPlaceholderText("Console Server Password")
@@ -107,9 +114,12 @@ class DeploymentModule:
             self.osVersions.setStyleSheet("background-color: rgb(255,255,255);")
 
             # Connect to ftp and get files for updating os
-            self.osFiles = getFiles(".tgz")
-            for index in range(len(self.osFiles)):
-                self.osVersions.addItem(self.osFiles[index])
+            self.osVersions.clear()
+            thread = FileGrabber(self.window)
+            thread.setup(self, ".tgz")
+            thread.trigger.connect(self.fillComboBox)
+            thread.start()
+            self.threads.append(thread)
 
             loginDetailsLayout.addWidget(self.osVersions, 0, 0, 1, 1)
 
@@ -131,10 +141,13 @@ class DeploymentModule:
             self.toConfiguration.setStyleSheet("background-color: rgb(255,255,255);")
 
             # connect to ftp and get any files from ftp
-            self.confFiles = getFiles(".conf")
-            for index in range(len(self.confFiles)):
-                self.fromConfiguration.addItem(self.confFiles[index])
-                self.toConfiguration.addItem(self.confFiles[index])
+            self.fromConfiguration.clear()
+            self.toConfiguration.clear()
+            thread = FileGrabber(self.window)
+            thread.setup(self, ".conf")
+            thread.trigger.connect(self.fillComboBox)
+            thread.start()
+            self.threads.append(thread)
 
             configurationRangeLayout.addWidget(self.fromConfiguration)
             configurationRangeLayout.addWidget(self.toConfiguration)
@@ -166,12 +179,6 @@ class DeploymentModule:
             self.progressBar.setTextDirection(QProgressBar.TopToBottom)
             self.progressBar.setObjectName("self.progressBar")
             self.progressBar.setStyleSheet("QProgressBar::chunk:vertical { background-color: rgb(0,188,212);}")
-
-            deploymentButton = QPushButton("Begin Deployment")
-            deploymentButton.setObjectName("deploymentButton")
-            deploymentButton.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
-            deploymentButton.clicked.connect(self.myPrinty)
-            progressBarLayout.addWidget(deploymentButton, 2, 0, 1, 1)
 
             progressBarLayout.addWidget(self.progressBar, 0, 0, 1, 1)
 
@@ -243,92 +250,16 @@ class DeploymentModule:
             self.layout.setLayout(verticalContainer)
         except Exception as e: print(str(e))
 
-    def myPrinty(self):
-        print("wee")
-
-    def beginDeployment(self):
-        try:
-            print(self.fromPortNo.text())
-            # Make sure fields aren't empty
-            print ("Hello")
-            areFieldsEmpty = self.fieldsEmpty()
-            if self.fieldsEmpty():
-                QMessageBox.information(QMessageBox, "Empty Fields", "Please ensure all the fields are filled")
-                return
-            # Make sure both port numbers are actually numbers
-            if (not isNumber(self.toPortNo.text()) or not isNumber(self.fromPortNo.text())):
-                QMessageBox.information(QMessageBox, "Not a Number", "Please ensure ports are numbers")
-                return
-
-            # make sure configurations are the same amount as devices being updated
-            fromConf = self.fromConfiguration.currentIndex()
-            toConf = self.toConfiguration.currentIndex()
-            fromPort = int(self.fromPortNo.text())
-            toPort = int(self.toPortNo.text())
-            if (not (toConf > fromConf)):
-                QMessageBox.information(QMessageBox, "Config List Error",
-                                        "Please ensure your starting configuration is before your final configuration")
-                return
-            if (not ((toConf - fromConf) + 1 == (toPort - fromPort) + 1)):
-                QMessageBox.information(QMessageBox, "Not Enough Configs",
-                                        "Please ensure there are enough config files for each specified device")
-                return
-
-            # apply patch
-            patch_crypto_be_discovery()
-            configurationsToUse = []
-            for index in range(fromConf, toConf + 1):
-                configurationsToUse.append(self.confFiles[index])
-
-            willBackup = self.willCloneToBackup.isChecked()
-            OsFile = self.osVersions.currentText()
-            consolePassword = self.consolePasswordField.text()
-            databasePassword = self.dbPasswordField.text()
-            self.progressBar.setValue(0)
-
-            if willBackup:
-                print("Will clone to backup paritition")
-            else:
-                print("Will not clone to backup paritition")
-
-            confIndex = fromConf
-            # check to see how many devices we're updating
-            if (toPort - fromPort + 1 == 1):
-                print("Updating device at port " + str(toPort))
-                thread = Updater(self)
-                thread.trigger.connect(self.updateProgress)
-                thread.setup(toPort, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex], willBackup,
-                             True)
-                thread.start()
-                self.threads.append(thread)
-
-            else:
-                confIndex = 0
-                for index in range(fromPort, toPort):
-                    print("Updating device at port " + str(toPort))
-                    thread = Updater(self)
-                    thread.trigger.connect(self.updateProgress)
-                    thread.setup(index, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex],
-                                 willBackup,
-                                 False)
-                    thread.start()
-                    self.threads.append(thread)
-                    confIndex += 1
-
-                # make final thread the one to update GUI
-                thread = Updater(self)
-                thread.trigger.connect(self.updateProgress)
-                thread.setup(toPort, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex], willBackup,
-                             True)
-                thread.start()
-                self.threads.append(thread)
-        except Exception as e: print(str(e))
-
-    def fieldsEmpty(self):
-        if (len(self.fromPortNo.text()) < 1 or len(self.toPortNo.text()) < 1 or len(self.consolePasswordField.text()) < 1):
-            return True
-        else:
-            return False
+    def clearProgressText(self):
+        self.connectedToDevice.setStyleSheet("color:white; font-size:16px;border: 1px solid rgb(96,125,139);")
+        self.loggedIn.setStyleSheet("color:white; font-size:16px;border: 1px solid rgb(96,125,139);")
+        self.downloadingOS.setStyleSheet("color:white; font-size:16px;border: 1px solid rgb(96,125,139);")
+        self.installingOS.setStyleSheet("color:white; font-size:16px;border: 1px solid rgb(96,125,139);")
+        self.rebootingDevice.setStyleSheet("color:white; font-size:16px;border: 1px solid rgb(96,125,139);")
+        self.loggedInAgain.setStyleSheet("color:white; font-size:16px;border: 1px solid rgb(96,125,139);")
+        self.applyingConfig.setStyleSheet("color:white; font-size:16px;border: 1px solid rgb(96,125,139);")
+        self.rebootingTheDeviceAgain.setStyleSheet("color:white; font-size:16px;border: 1px solid rgb(96,125,139);")
+        self.deploymentSuccessful.setStyleSheet("color:white; font-size:16px;border: 1px solid rgb(96,125,139);")
 
     def updateProgress(self, percentage):
         self.progressBar.setValue(percentage)
@@ -350,6 +281,148 @@ class DeploymentModule:
         else:
             self.deploymentSuccessful.setStyleSheet("color:white; font-size:16px;")
 
+    #fill appropriate combo box when code from thread is returned
+    def fillComboBox(self,code):
+        #deal with conf or tgz depending on code
+        if code == 0:
+            for index in range(len(self.confFiles)):
+                self.fromConfiguration.addItem(self.confFiles[index])
+                self.toConfiguration.addItem(self.confFiles[index])
+        elif code == 1:
+            for index in range(len(self.osFiles)):
+                deploymentWindow.osVersions.addItem(self.osFiles[index])
+
+
+    def refreshPage(self):
+        try:
+            if (self.blocked):
+                msg.messageWindow("Process is currently running", "Cannot refresh page when units are being updated",
+                                  False)
+            else:
+                self.threads.clear()
+                self.clearProgressText()
+                self.fromConfiguration.clear()
+                self.toConfiguration.clear()
+                thread = FileGrabber(self.window)
+                thread.setup(self,".conf")
+                thread.trigger.connect(self.fillComboBox)
+                thread.start()
+                self.threads.append(thread)
+
+                self.osVersions.clear()
+                thread = FileGrabber(self.window)
+                thread.setup(self, ".tgz")
+                thread.trigger.connect(self.fillComboBox)
+                thread.start()
+                self.threads.append(thread)
+
+                self.dbPasswordField.setText("")
+                self.consolePasswordField.setText("")
+                self.willCloneToBackup.setChecked(False)
+                self.toPortNo.setText("")
+                self.fromPortNo.setText("")
+        except Exception as e:
+            msg.messageWindow("Error Refreshing","An error occured clearing page and connecting to FTP server, try again later",True)
+
+#File grabber class to get files off UI thread
+class FileGrabber(QThread):
+    trigger = pyqtSignal(int)
+
+    def __init__(self, parent=None):
+        super(FileGrabber, self).__init__(parent)
+
+    def setup(self, deploymentWindow,extension):
+        self.deploymentWindow = deploymentWindow
+        self.extension = extension
+
+    def run(self):
+        if  "conf" in self.extension:
+            deploymentWindow.confFiles = getFiles(self.extension)
+            self.trigger.emit(0)
+        else:
+            deploymentWindow.osFiles = getFiles(self.extension)
+            self.trigger.emit(1)
+
+
+#launch the beginDeployment method through this in the .connect of the ui
+def startDeployment(self):
+    global deploymentWindow
+    beginDeployment(deploymentWindow)
+
+def beginDeployment(deploymentWindow):
+    try:
+        deploymentWindow.threads.clear()
+        # Make sure fields aren't empty
+        if fieldsEmpty(deploymentWindow):
+            msg.messageWindow("Empty Fields", "Please ensure all the fields are filled",True)
+            return
+        # Make sure both port numbers are actually numbers
+        if (not isNumber(deploymentWindow.toPortNo.text()) or not isNumber(deploymentWindow.fromPortNo.text())):
+            msg.messageWindow("Not a Number", "Please ensure ports are numbers",True)
+            return
+
+        # make sure configurations are the same amount as devices being updated
+        fromConf = deploymentWindow.fromConfiguration.deploymentWindowIndex()
+        toConf = deploymentWindow.toConfiguration.deploymentWindowIndex()
+        fromPort = int(deploymentWindow.fromPortNo.text())
+        toPort = int(deploymentWindow.toPortNo.text())
+        if (not (toConf > fromConf)):
+            msg.messageWindow("Config List Error","Please ensure your starting configuration is before your final configuration", True)
+            return
+        if (not ((toConf - fromConf) + 1 == (toPort - fromPort) + 1)):
+            msg.messageWindow("Not Enough Configs","Please ensure there are enough config files for each specified device",True)
+            return
+
+        # apply patch
+        patch_crypto_be_discovery()
+        configurationsToUse = []
+        for index in range(fromConf, toConf + 1):
+            configurationsToUse.append(deploymentWindow.confFiles[index])
+
+        willBackup = deploymentWindow.willCloneToBackup.isChecked()
+        OsFile = deploymentWindow.osVersions.deploymentWindowText()
+        consolePassword = deploymentWindow.consolePasswordField.text()
+        databasePassword = deploymentWindow.dbPasswordField.text()
+        deploymentWindow.progressBar.setValue(0)
+
+        confIndex = fromConf
+        # check to see how many devices we're updating
+        if (toPort - fromPort + 1 == 1):
+            thread = Updater(deploymentWindow)
+            thread.trigger.connect(deploymentWindow.updateProgress)
+            thread.setup(toPort, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex], willBackup,
+                         True)
+            thread.start()
+            deploymentWindow.threads.append(thread)
+
+        else:
+            confIndex = 0
+            for index in range(fromPort, toPort):
+                thread = Updater(deploymentWindow)
+                thread.trigger.connect(deploymentWindow.updateProgress)
+                thread.setup(index, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex],
+                             willBackup,
+                             False)
+                thread.start()
+                deploymentWindow.threads.append(thread)
+                confIndex += 1
+
+            # make final thread the one to update GUI
+            thread = Updater(deploymentWindow)
+            thread.trigger.connect(deploymentWindow.updateProgress)
+            thread.setup(toPort, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex], willBackup,
+                         True)
+            thread.start()
+            deploymentWindow.threads.append(thread)
+    except Exception as e:
+        print(str(e))
+
+
+def fieldsEmpty(deploymentWindow):
+    if (len(deploymentWindow.fromPortNo.text()) < 1 or len(deploymentWindow.toPortNo.text()) < 1 or len(deploymentWindow.consolePasswordField.text()) < 1):
+        return True
+    else:
+        return False
 
 def getFiles(extension):
     try:

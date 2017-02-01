@@ -24,6 +24,8 @@ background-color: rgb(69,90,100);
 }
 """
 
+
+
 class windowLauncher(QWidget):
     def __init__(self):
         super(windowLauncher, self).__init__()
@@ -75,9 +77,6 @@ class windowLauncher(QWidget):
         #finally show it all
         self.show()
 
-    def printy(self):
-        print("hi")
-
     def launcherUI(self):
 
         verticalContainer = QVBoxLayout(self)
@@ -117,18 +116,26 @@ class windowLauncher(QWidget):
             QMessageBox.information(self, "Settings", "You must fill in the information required to use this application")
         else:
             self.Stack.setCurrentIndex(0)
+
     def initialiseDeployment(self):
         self.Stack.setCurrentIndex(1)
+
     def initialiseMonitoring(self):
         print("Monitoring Module")
+
     def initialiseTroubleshooting(self):
         self.Stack.setCurrentIndex(3)
+
     def initialiseSettings(self):
         self.Stack.setCurrentIndex(2)
-    def refreshPage(self):
-        print("Refresh")
+
+#handle exit events and clean up files
+def exitHandler():
+    os.remove("network_path.png")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    app.aboutToQuit.connect(exitHandler) #connect app to handler to remove files not needed outside runtime
     ex = windowLauncher()
     sys.exit(app.exec_())
+

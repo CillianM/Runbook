@@ -6,10 +6,15 @@ from PyQt5.QtWidgets import *
 from imagebutton import ImageButton
 import messagewindow as msg
 
+#global variable to save window state
+settingsWindow = None
+
 class SettingsModule:
     def __init__(self,window,layout):
         self.window = window
         self.layout = layout
+        global settingsWindow
+        settingsWindow = self
 
     def settingsUI(self,window):
         effect = QGraphicsDropShadowEffect()
@@ -164,7 +169,7 @@ class SettingsModule:
         bottomLayout.setObjectName("bottomLayout")
         applySettingsButton = QPushButton("Apply Settings")
         applySettingsButton.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
-        applySettingsButton.clicked.connect(self.applySettings)
+        applySettingsButton.clicked.connect(beginApplySettings)
         bottomLayout.addWidget(applySettingsButton)
 
         innerVerticalLayout.addLayout(bottomLayout)
@@ -175,7 +180,6 @@ class SettingsModule:
         settingsVerticalContainer.addStretch()
         self.layout.setLayout(settingsVerticalContainer)
         self.fillSettingsFields()
-
 
     def fillSettingsFields(self):
         try:
@@ -217,34 +221,50 @@ class SettingsModule:
         else:
             return True
 
+#launch the applySettings method through this in the .connect of the ui
+def beginApplySettings():
+    global settingsWindow
+    applySettings(settingsWindow)
 
-    def applySettings(self):
-        if self.allSettingsFieldsFilled():
+def applySettings(settingsWindow):
+    if settingsWindow.allSettingsFieldsFilled():
+        try:
+            #settings are saved in xml file
             settings_file = open("Settings.xml", "w")
-            osPath = makeLegalPath(self.ftpOsPath.text())
-            confPath = makeLegalPath(self.ftpConfPath.text())
-            iniconfPath = makeLegalPath(self.ftpIniConfPath.text())
+            #ensure paths are "legal"
+            osPath = makeLegalPath(settingsWindow.ftpOsPath.text())
+            confPath = makeLegalPath(settingsWindow.ftpConfPath.text())
+            iniconfPath = makeLegalPath(settingsWindow.ftpIniConfPath.text())
 
-            dict = {'Settings': {'Ftp-Info': {'ftpServerAddress': self.ftpServerAddress.text(),
+            #construct dict to be translated into xml
+            dict = {'Settings': {'Ftp-Info': {'ftpServerAddress': settingsWindow.ftpServerAddress.text(),
                                               'ftpOsPath': osPath,
                                               'ftpConfPath': confPath,
                                               'ftpIniConfPath': iniconfPath},
-                                 'Console-Info': {'consoleAddress': self.consoleAddress.text(),
-                                                  'consoleUsername': self.consoleUsername.text(),
-                                                  'settingsFromPort': self.settingsFromPort.text(),
-                                                  'settingsToPort': self.settingsToPort.text()},
-                                 'Database-Info': {'databseAddress': self.databseAddress.text(),
-                                                   'databseUsername': self.databseUsername.text(),
-                                                   'configTable': self.configTable.text()}}}
+                                 'Console-Info': {'consoleAddress': settingsWindow.consoleAddress.text(),
+                                                  'consoleUsername': settingsWindow.consoleUsername.text(),
+                                                  'settingsFromPort': settingsWindow.settingsFromPort.text(),
+                                                  'settingsToPort': settingsWindow.settingsToPort.text()},
+                                 'Database-Info': {'databseAddress': settingsWindow.databseAddress.text(),
+                                                   'databseUsername': settingsWindow.databseUsername.text(),
+                                                   'configTable': settingsWindow.configTable.text()}}}
+            #convert dict
             xml = xmltodict.unparse(dict, pretty=True)
+            #write dict to file
             settings_file.write(xml)
             settings_file.close()
+            #alert user to success
             msg.messageWindow("Settings Saved","Your Settings are saved",False)
-            self.initialiseLauncher()
-            self.fillSettingsFields()
-        else:
-            msg.errorWindow("Empty Fields", "Please fill in all fields provided",True)
+            settingsWindow.window.initialiseLauncher()
+            settingsWindow.fillSettingsFields()
+        #catch any exceptions when writing to file and cope gracefully
+        except Exception as e:
+            msg.messageWindow("An Error Occured", "There was an error saving your settings the details are as follows: \n " + str(e), True)
+    else:
+        msg.messageWindow("Empty Fields", "Please fill in all fields provided",True)
 
+
+#Ensure that the paths being put in are legal (ie. slash at the start and end)
 def makeLegalPath(path):
     if "/" in path[0] and "/" in path[len(path)-1]:
         return path

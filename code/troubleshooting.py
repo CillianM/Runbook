@@ -1,3 +1,7 @@
+import networkx as nx
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
@@ -6,6 +10,7 @@ from PyQt5.QtWidgets import *
 import scanner
 import os.path
 from imagebutton import ImageButton
+import messagewindow as msg
 
 class TroubleshootingModule:
     def __init__(self, window, layout):
@@ -29,7 +34,7 @@ class TroubleshootingModule:
             topBarLayout.addWidget(backButton)
             refreshButton = ImageButton(QPixmap("refresh.png"))
             refreshButton.setObjectName("refreshButton")
-            refreshButton.clicked.connect(window.refreshPage)
+            refreshButton.clicked.connect(self.refreshPage)
             refreshButton.setStyleSheet("height: 50px;")
             topBarLayout.addWidget(refreshButton)
 
@@ -55,7 +60,7 @@ class TroubleshootingModule:
             loginButton = QPushButton("Connect to device")
             loginButton.setObjectName("deploymentButton")
             loginButton.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
-            # mappingButton.clicked.connect(self.beginDeployment)
+            loginButton.clicked.connect(self.loginToDevice)
             loginContainer.addWidget(loginButton)
 
             loginFrame = QFrame()
@@ -81,7 +86,9 @@ class TroubleshootingModule:
             mapContainer = QVBoxLayout(window)
             dir_path = os.path.dirname(os.path.realpath(__file__))
             self.image = QLabel()
-            mapImage = QPixmap(dir_path + '\\network_path.png')
+            blankImage = QPixmap(551,416)
+            blankImage.fill(Qt.white)
+            mapImage = QPixmap(blankImage)
             mapImage = mapImage.scaled(mapImage.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self.image.setPixmap(mapImage)
             self.image.setStyleSheet("background-color: white")
@@ -107,6 +114,22 @@ class TroubleshootingModule:
             self.layout.setLayout(verticalContainer)
         except Exception as e: print(str(e))
 
+    def refreshPage(self):
+        if(self.blocked):
+            msg.messageWindow("Process is currently running","Cannot refresh page while scanning network",False)
+        else:
+            #clear fields and progress bar
+            self.scannerProgressBar.setValue(0)
+            self.deviceAddress.setText("")
+            self.deviceUsername.setText("")
+            self.devicePassword.setText("")
+
+            #clear image
+            blankImage = QPixmap(551, 416)
+            blankImage.fill(Qt.white)
+            mapImage = QPixmap(blankImage)
+            mapImage = mapImage.scaled(mapImage.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.image.setPixmap(mapImage)
 
     # get mouse position from click event
     def getPos(self, event):
@@ -129,17 +152,27 @@ class TroubleshootingModule:
                 QMessageBox.information(self, "Scan Running", "You're already running a network scan")
         except Exception as e: print(str(e))
 
+    def loginToDevice(self):
+        print("login")
+
 
     # called from thread, updates the progress bar or wraps up and sets new image
     def updateScannerProgress(self, percentage):
         try:
             if (percentage == 101):
+                G = scanner.graphLocation
+                nx.draw_networkx(G)
+                plt.axis('off')
+                plt.autoscale()
+                plt.savefig("network_path.png", bbox_inches='tight')  # save as png
+
                 dir_path = os.path.dirname(os.path.realpath(__file__))
                 mapImage = QPixmap(dir_path + '\\network_path.png')
                 mapImage = mapImage.scaled(mapImage.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.image.setPixmap(mapImage)
                 self.blocked = False
                 self.scannerProgressBar.setValue(0)
+                self.threads.clear()
             else:
                 self.scannerProgressBar.setValue(percentage)
         except Exception as e: print(str(e))
