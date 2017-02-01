@@ -31,6 +31,7 @@ class windowLauncher(QWidget):
         super(windowLauncher, self).__init__()
         #main window properties
         self.setWindowTitle('Network Deployment Automation Maintenance Tool')
+        self.setWindowIcon(QIcon('icon.ico'))
         self.setFixedSize(900, 700)
 
         #global UI widgets

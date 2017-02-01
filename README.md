@@ -12,6 +12,10 @@ This module connects to a database and an FTP server to provide version control 
 <img src="http://i.imgur.com/9uXJKq3.png" width="48">
 This module lets you scan your network and log in to devices you have access to for system information (CPU/RAM usage, etc.)
 
+### The window icon
+<img src="http://i.imgur.com/o0Jo5df.png" width="48">
+It has been created with the same color pallet to complement the rest of the GUI. 
+
 ### Prerequisites: 
 + Your own FTP server with anonymous login
 + Your own database with the schema described below
