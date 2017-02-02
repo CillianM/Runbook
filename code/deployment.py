@@ -1,6 +1,5 @@
 import datetime
 
-import pyodbc
 from ftplib import FTP
 
 import paramiko
@@ -10,6 +9,8 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 import time
+import socket
+import pymysql
 
 from imagebutton import ImageButton
 import messagewindow as msg
@@ -485,13 +486,11 @@ class Updater(QThread):
 
     def connect_session(self,portNo, consolePassword,databasePassword,OsFile,configFile,willClone,updateGui):
         try:
-            # replace port colon with underscore for filename
             ftpAddress = getFtpAddress()
             osFile = getOsPath() + OsFile
             confPath = getIniConfPath() + configFile
-            username = getConsoleName()
-            hostname = username + ":" + str(portNo) + "@" + getConsoleAddress()
-            filename = username + ":" + str(portNo) + ".xml"
+            username = getConsoleName() + ":" + str(portNo)
+            hostname = getConsoleAddress()
 
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -504,16 +503,13 @@ class Updater(QThread):
             if (updateGui):
                 self.trigger.emit(22)
             send_command(term, "set cli screen-length 0")
-            originalVersion = send_command(term, "show system version")
+            originalVersion = send_command(term, "show system software")
 
 
             xml = send_command(term, "show chassis hardware | display xml")
             xml = xml[37:(len(xml)) - 10]
-            text_file = open(filename, "w")
-            text_file.write(xml)
-            text_file.close()
             # parsing for serial
-            serialNo = parse_xml_serial(filename, username)
+            serialNo = parse_xml_serial(xml)
             #push serial to database
             pushSerial(getDatabaseAddress(),getDatabaseUsername(),databasePassword,serialNo,confPath)
 
@@ -535,12 +531,7 @@ class Updater(QThread):
             # partitioned snapshot
             send_command(term, "set cli screen-length 0")
             # junos version check
-            output = send_command(term, "show system snapshot media internal | display xml")
-            output = output[51:(len(output)) - 10]
-            text_file = open(filename, "w")
-            text_file.write(output)
-            text_file.close()
-            updatedVersion = send_command(term, "show system version")
+            updatedVersion = send_command(term, "show system software")
             if (updateGui):
                 self.trigger.emit(77)
             if not updatedVersion == originalVersion:
@@ -568,6 +559,7 @@ class Updater(QThread):
             msg.messageWindow("Authentication Error!","Authentication failed, Check your details and try again",True)
         except paramiko.ssh_exception.SSHException:
             msg.messageWindow("Unknown Error!", "Unknown error connecting or establishing an SSH session",True)
+        except socket.gaierror as e: print(str(e))
 
 # Credit to exvito for patch
 # link: https://github.com/pyca/cryptography/issues/2039
@@ -591,16 +583,16 @@ def patch_crypto_be_discovery():
     backends._available_backends_list = [
         be for be in (be_cc, be_ossl) if be is not None
         ]
-
+#Failing to work, needs to be fixed
 def pushSerial(dbAddress, dbUsername, dbPassword, serialNo, configFile):
-    cnxn = pyodbc.connect(
-        'DRIVER={SQL Server};SERVER=' + dbAddress + ';DATABASE=runbook;UID=' + dbUsername + ';PWD=' + dbPassword)
-    cursor = cnxn.cursor()
-    time = datetime.datetime.fromtimestamp(time.time()).strftime('%H:%M %d-%m-%y')
+    conn = pymysql.connect(host=dbAddress, port=3306, user=dbUsername, passwd=dbPassword, db='runbook')
+    cursor = conn.cursor()
+    #Change back to time
+    #time = datetime.datetime.fromtimestamp(time.time()).strftime('%H:%M %d-%m-%y')
+    time="now"
     configTable = getDatabaseConfTable()
-    cursor.execute(
-        "insert into configTable(serial,user,path,timestamp,isprimary) values (serialNo,dbUsername,configFile,time,1)")
-    cnxn.commit()
+    cursor.execute("insert into " + configTable + "(serial,user,path,timestamp,isprimary) values ("+serialNo+","+dbUsername+","+configFile+","+time+","+1+")")
+    conn.commit()
 
 def send_command(term, cmd):
     term.send(cmd + "\n")
@@ -611,12 +603,10 @@ def send_command(term, cmd):
     # print(fOutput)
     return fOutput
 
-def parse_xml_serial(xml, username):
+def parse_xml_serial(xml):
     try:
-        with open(xml) as fd:
-            mydict = xmltodict.parse(fd.read())
-        serial = "".format(mydict['rpc-reply']['chassis-inventory']['chassis']['serial-number'])
-        return serial
+        xmlDict= xmltodict.parse(xml)
+        return xmlDict['rpc-reply']['chassis-inventory']['chassis']['serial-number']
 
     except:
         return ""
@@ -692,7 +682,7 @@ def getDatabaseAddress():
     try:
         with open("Settings.xml") as file:
             settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Console-Info']['databseAddress']
+        return settingsDict['Settings']['Database-Info']['databseAddress']
     except:
         return ""
 
@@ -709,6 +699,6 @@ def getDatabaseConfTable():
     try:
         with open("Settings.xml") as file:
             settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Database-Info']['initConfigTable']
+        return settingsDict['Settings']['Database-Info']['configTable']
     except:
         return ""
