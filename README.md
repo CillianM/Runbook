@@ -32,9 +32,8 @@ It has been created with the same color pallet to complement the rest of the GUI
 
 [Matplotlib](http://matplotlib.org/)
 
-[Pyodbc](https://mkleehammer.github.io/pyodbc/)
+[Pymysql](https://github.com/PyMySQL/PyMySQL)
 
 #### Troubleshooting
-+ If you're trying to building Pyodbc then make sure you have the [C++ build tools](http://landinghub.visualstudio.com/visual-cpp-build-tools) from microsoft
 + Paramiko has problems installing on some distros of linux so look to their support page if you're having trouble building it
 + If you have any issues with the application itself contact [Cillian](https://gitlab.computing.dcu.ie/mcneilc2) or [Filip](https://gitlab.computing.dcu.ie/nikolif2) along with what you were doing and what went wrong at the time
