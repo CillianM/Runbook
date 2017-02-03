@@ -280,6 +280,7 @@ class DeploymentModule:
         elif (percentage == 88):
             self.rebootingTheDeviceAgain.setStyleSheet("color:white; font-size:16px;")
         else:
+            self.blocked=False
             self.deploymentSuccessful.setStyleSheet("color:white; font-size:16px;")
 
     #fill appropriate combo box when code from thread is returned
@@ -352,6 +353,10 @@ def startDeployment(self):
 
 def beginDeployment(deploymentWindow):
     try:
+        #if the window is pressed twice
+        if deploymentWindow.blocked:
+            msg.messageWindow("Process running.", "Please wait for deploymentto finish.", True)
+            return
         deploymentWindow.threads.clear()
         # Make sure fields aren't empty
         if fieldsEmpty(deploymentWindow):
@@ -386,6 +391,8 @@ def beginDeployment(deploymentWindow):
         databasePassword = deploymentWindow.dbPasswordField.text()
         deploymentWindow.progressBar.setValue(0)
 
+        deploymentWindow.blocked = True
+
         confIndex = fromConf
         # check to see how many devices we're updating
         if (toPort - fromPort + 1 == 1):
@@ -407,8 +414,10 @@ def beginDeployment(deploymentWindow):
                 thread.start()
                 deploymentWindow.threads.append(thread)
                 confIndex += 1
+                time.sleep(2)#staggered threads to avoid collision
 
             # make final thread the one to update GUI
+            thread = Updater(deploymentWindow.window)
             thread.trigger.connect(deploymentWindow.updateProgress)
             thread.setup(toPort, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex], willBackup,
                          True)
@@ -503,43 +512,57 @@ class Updater(QThread):
             if (updateGui):
                 self.trigger.emit(22)
             send_command(term, "set cli screen-length 0")
+
+            #---parsing for serial---
             originalVersion = send_command(term, "show system software")
-
-
             xml = send_command(term, "show chassis hardware | display xml")
             xml = xml[37:(len(xml)) - 10]
-            # parsing for serial
             serialNo = parse_xml_serial(xml)
             #push serial to database
-            pushSerial(getDatabaseAddress(),getDatabaseUsername(),databasePassword,serialNo,confPath)
-
+            updatedTime = pushSerial(getDatabaseAddress(),getDatabaseUsername(),databasePassword,serialNo,confPath)
             if (updateGui):
                 self.trigger.emit(44)
-            send_command(term,"request system software add \"" + ftpAddress + "\\" + osFile + "\" no-copy no-validate reboot")
+            #---upgrade os---
+            upgradeOs = "request system software add ftp://"+ftpAddress+osFile+" no-copy no-validate reboot"
+
+            send_command(term,upgradeOs)
 
             if (updateGui):
                 self.trigger.emit(55)
-            check(term, 120, "login")
+            print("upgrading")
+            check(term, 60, "login")
+            print("finished")
             _login(term)
 
             if (updateGui):
                 self.trigger.emit(66)
+
+            #---partition snapshot---
             if(willClone):
                 send_command(term, "request system snapshot media internal slice alternate")
-            # requested system snapshot
+
             check(term, 60, "root")
-            # partitioned snapshot
             send_command(term, "set cli screen-length 0")
-            # junos version check
+
+            #junos version check
             updatedVersion = send_command(term, "show system software")
             if (updateGui):
                 self.trigger.emit(77)
             if not updatedVersion == originalVersion:
                 send_command(term, "configure")
                 send_command(term, "delete /yes")
-                send_command(term, "load set \""+ ftpAddress  + "\"" + confPath)
-                send_command(term, "commit-and-quit")
-                send_command(term, "request system halt in 0")
+                send_command(term, "load set ftp://"+ ftpAddress + confPath)
+
+                #---Agile Networks requirement --> Will be reomoved for the production version---
+                xml = send_command(term, "show snmp location | display xml")
+                xml = xml[34:(len(xml)) - 15]
+                rollNo = parse_xml_rollNo(xml)
+                #push roll number to database
+                pushRollNo(getDatabaseAddress(), getDatabaseUsername(), databasePassword, rollNo, updatedTime)
+
+                send_command(term, "commit and-quit")
+                check(term, 60, "root")
+                send_command(term, "request system reboot")
                 time.sleep(2)
                 send_command(term, "yes")
             else:
@@ -583,16 +606,43 @@ def patch_crypto_be_discovery():
     backends._available_backends_list = [
         be for be in (be_cc, be_ossl) if be is not None
         ]
-#Failing to work, needs to be fixed
+
 def pushSerial(dbAddress, dbUsername, dbPassword, serialNo, configFile):
+
+    time = getTime()
+    configTable = getDatabaseConfTable()
+
     conn = pymysql.connect(host=dbAddress, port=3306, user=dbUsername, passwd=dbPassword, db='runbook')
     cursor = conn.cursor()
-    #Change back to time
-    #time = datetime.datetime.fromtimestamp(time.time()).strftime('%H:%M %d-%m-%y')
-    time="now"
+
+    sql = ("insert into " + configTable + "(serial,user,path,timestamp,isprimary) values (\""+serialNo+"\",\""+dbUsername+"\",\""+configFile+"\",\""+time+"\",1)")
+
+    #Push the data to the database
+    try:
+        cursor.execute(sql)
+        conn.commit()
+        id = cursor.execute(sql)
+    except:
+        conn.rollback()
+
+    conn.close()
+    return time
+
+def pushRollNo(dbAddress, dbUsername, dbPassword, rollNo, updatedTime):
     configTable = getDatabaseConfTable()
-    cursor.execute("insert into " + configTable + "(serial,user,path,timestamp,isprimary) values ("+serialNo+","+dbUsername+","+configFile+","+time+","+1+")")
-    conn.commit()
+    conn = pymysql.connect(host=dbAddress, port=3306, user=dbUsername, passwd=dbPassword, db='runbook')
+    cursor = conn.cursor()
+
+    sql = ("update " + configTable + " set title=\"Initial Configuration\", description=\""+rollNo+"\" where timestamp=\""+ updatedTime+"\"")
+
+    #Push the data to the database
+    try:
+        cursor.execute(sql)
+        conn.commit()
+    except:
+        conn.rollback()
+
+    conn.close()
 
 def send_command(term, cmd):
     term.send(cmd + "\n")
@@ -609,7 +659,15 @@ def parse_xml_serial(xml):
         return xmlDict['rpc-reply']['chassis-inventory']['chassis']['serial-number']
 
     except:
-        return ""
+        return "Serial number parsing error."
+
+def parse_xml_rollNo(xml):
+    try:
+        xmlDict= xmltodict.parse(xml)
+        return xmlDict['rpc-reply']['configuration']['snmp']['location']
+
+    except:
+        return "Roll number parsing error."
 
 def check(term, timeToWait, promptToWaitFor):
     timesChecked = 1
@@ -617,7 +675,7 @@ def check(term, timeToWait, promptToWaitFor):
     while (not ready):
         time.sleep(timeToWait)
         answer = send_command(term, "")
-        # print(answer)
+        print(answer)
         if (promptToWaitFor in answer):
             ready = True
         timesChecked = timesChecked + 1
@@ -702,3 +760,6 @@ def getDatabaseConfTable():
         return settingsDict['Settings']['Database-Info']['configTable']
     except:
         return ""
+
+def getTime():
+    return '{:%H:%M:%S %d-%m-%Y}'.format(datetime.datetime.now())
