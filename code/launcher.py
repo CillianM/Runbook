@@ -1,15 +1,9 @@
-import datetime
-import random
-import sys
-import threading
 
-import time
+import sys
 import os.path
 
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
-
-from ftplib import *
 
 from deployment import DeploymentModule
 from troubleshooting import TroubleshootingModule
@@ -18,14 +12,12 @@ from imagebutton import ImageButton
 
 #Styling for progress bar
 DEFAULT_STYLE = """
-
+QWidget {
 background-color: rgb(69,90,100);
-
 }
+
+
 """
-
-
-
 class windowLauncher(QWidget):
     def __init__(self):
         super(windowLauncher, self).__init__()
@@ -33,6 +25,7 @@ class windowLauncher(QWidget):
         self.setWindowTitle('Network Deployment Automation Maintenance Tool')
         self.setWindowIcon(QIcon('icon.ico'))
         self.setFixedSize(900, 700)
+        self.closeEvent = self.closeEvent
 
         #global UI widgets
         self.launcher = QWidget()
@@ -65,15 +58,15 @@ class windowLauncher(QWidget):
             self.Stack.setCurrentIndex(0) #if there is a file we put them in the launcher
 
         #initialize Module Classes
-        deploymentModule = DeploymentModule(self, self.deployment)
-        troubleshootingModule = TroubleshootingModule(self,self.troubleshooting)
-        settingsModule = SettingsModule(self,self.settings)
+        self.deploymentModule = DeploymentModule(self, self.deployment)
+        self.troubleshootingModule = TroubleshootingModule(self,self.troubleshooting)
+        self.settingsModule = SettingsModule(self,self.settings)
 
         #appropriate UI layouts and methods
         self.launcherUI()
-        settingsModule.settingsUI(self)
-        troubleshootingModule.troubleshootingUI(self)
-        deploymentModule.deploymentUI(self)
+        self.settingsModule.settingsUI(self)
+        self.troubleshootingModule.troubleshootingUI(self)
+        self.deploymentModule.deploymentUI(self)
 
         #finally show it all
         self.show()
@@ -110,8 +103,6 @@ class windowLauncher(QWidget):
 
         self.launcher.setLayout(verticalContainer)
 
-
-
     def initialiseLauncher(self):
         if not os.path.isfile('./Settings.xml'):
             QMessageBox.information(self, "Settings", "You must fill in the information required to use this application")
@@ -130,13 +121,23 @@ class windowLauncher(QWidget):
     def initialiseSettings(self):
         self.Stack.setCurrentIndex(2)
 
-#handle exit events and clean up files
-def exitHandler():
-    os.remove("network_path.png")
+    # handle exit events and clean up files
+    def closeEvent(self, event):
+        #check if they're deploying devices, this is important to know in case they stop deploying mid way
+        exitMsg = "Are you sure you want to quit?"
+        if self.deploymentModule.blocked:
+            exitMsg = "You're currently deploying devices, If you quit now you could damage your equipment. Are you sure?"
+
+        reply = QMessageBox.question(self, 'Closing Application',exitMsg, QMessageBox.Yes, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            if os.path.isfile('network_path.png'):
+                os.remove("network_path.png") #remove files not needed outside runtime
+            event.accept()
+        else:
+            event.ignore()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    app.aboutToQuit.connect(exitHandler) #connect app to handler to remove files not needed outside runtime
     ex = windowLauncher()
     sys.exit(app.exec_())
 

@@ -91,7 +91,7 @@ class TroubleshootingModule:
             mapImage = QPixmap(blankImage)
             mapImage = mapImage.scaled(mapImage.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self.image.setPixmap(mapImage)
-            self.image.setStyleSheet("background-color: white")
+            self.image.setStyleSheet("background-color: black")
             self.image.mousePressEvent = self.getPos
             mapContainer.addWidget(self.image)
             self.scannerProgressBar = QProgressBar(window)
@@ -135,7 +135,10 @@ class TroubleshootingModule:
     def getPos(self, event):
         x = event.pos().x()
         y = event.pos().y()
-        print(str(x) + " " + str(y))
+        if 46 <= y < 462:
+            y -= 46
+            print(str(x) + " " + str(y))
+
 
 
     # update the network map image with a new scan
@@ -161,9 +164,8 @@ class TroubleshootingModule:
         try:
             if (percentage == 101):
                 G = scanner.graphLocation
-                nx.draw_networkx(G)
+                nx.draw_networkx(G, node_color= '#00BCD4', node_size=500)
                 plt.axis('off')
-                plt.autoscale()
                 plt.savefig("network_path.png", bbox_inches='tight')  # save as png
 
                 dir_path = os.path.dirname(os.path.realpath(__file__))

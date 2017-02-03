@@ -2,16 +2,15 @@ import subprocess
 import ipaddress
 import socket
 import platform
-import sys
 import threading
 import uuid
 
 #Parse the arp table for the appropriate mac address
 import networkx as nx
-from PyQt5.QtCore import QThread
 from PyQt5.QtCore import pyqtSignal
 
 graphLocation = None
+liveIpAddresses = None
 window = None
 
 def find(s, ch):
@@ -19,13 +18,23 @@ def find(s, ch):
     return list[-1]
 
 
-def getMacAddr(currentOS, arpTable, currentIP):
-    if("Windows" in currentOS):
-        index = arpTable.index(currentIP) + len(currentIP) + 10
-        return arpTable[index:index + 17]
-    elif("Darwin" in currentOS or "Linux" in currentOS):
-        index = arpTable.index(currentIP) + len(currentIP) + 5
-        return arpTable[index:index + 17]
+def getMacAddr(arpTable, currentIP):
+    try:
+        if("Windows" in platform.system()):
+            index = arpTable.index(currentIP) + len(currentIP) + 10
+            return arpTable[index:index + 17]
+        elif("Darwin" in platform.system() or "Linux" in platform.system()):
+            index = arpTable.index(currentIP) + len(currentIP) + 5
+            return arpTable[index:index + 17]
+    except:
+        return "N/A"
+
+def getMyMacAddr():
+    myMacAddress = hex(uuid.getnode())[2:]
+    return ":".join(myMacAddress[i:i + 2] for i in range(0, len(myMacAddress), 2))
+
+def getMyIpAddr():
+    return socket.gethostbyname(socket.gethostname())
 '''
 if we can't just pick up IP address we can force a connection
 and see what made address made that connection
@@ -35,6 +44,9 @@ def getIpAddress():
     mySocket.connect(("136.206.1.4",80))
     return mySocket.getsockname()[0]
 
+def getArpTable():
+    return subprocess.Popen(['arp', '-a'], stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0].decode("utf-8")
+
 def scanNetwork(self):
     global window
     window = self
@@ -43,10 +55,9 @@ def scanNetwork(self):
     currentOS = platform.system()
 
     #Convert mac address from decimal to hex and add colons for readibility
-    myMacAddress = hex(uuid.getnode())[2:]
-    myMacAddress = ":".join(myMacAddress[i:i+2] for i in range(0,len(myMacAddress),2))
 
-    myIpAddress = socket.gethostbyname(socket.gethostname())
+
+    myIpAddress = getMyIpAddr()
     ipAddress = myIpAddress + "/24"
 
     #Issue when using WLan cards, get Loopback instead of actual IP address
@@ -65,18 +76,20 @@ def scanNetwork(self):
     chunkFour = []
 
     try:
-        thread1 = SubScanner(1, currentOS,myIpAddress, allHosts[0:int((length/4) +1)],chunkOne)
+        thread1 = SubScanner(1, myIpAddress, allHosts[0:int((length/4) +1)],chunkOne)
         thread1.start()
 
-        thread2 = SubScanner(2, currentOS, myIpAddress, allHosts[int((length/4) +1):int((length / 2) + 1)], chunkTwo)
+        thread2 = SubScanner(2, myIpAddress, allHosts[int((length/4) +1):int((length / 2) + 1)], chunkTwo)
         thread2.start()
 
-        thread3 = SubScanner(3, currentOS, myIpAddress, allHosts[int((length / 2) + 1):int((length / 4) + 1) * 3], chunkThree)
+        thread3 = SubScanner(3, myIpAddress, allHosts[int((length / 2) + 1):int((length / 4) + 1) * 3], chunkThree)
         thread3.start()
 
-        thread4 = SubScanner(4, currentOS, myIpAddress, allHosts[int((length / 4) + 1) * 3:length], chunkFour)
+        thread4 = SubScanner(4, myIpAddress, allHosts[int((length / 4) + 1) * 3:length], chunkFour)
         thread4.start()
 
+        #Small progress update to show them something is happening
+        self.trigger.emit(5)
         thread1.join()
         self.trigger.emit(25)
         thread2.join()
@@ -86,10 +99,8 @@ def scanNetwork(self):
         thread4.join()
     except Exception as e: print(str(e))
 
-
-
+    #bring all the found IPs back together
     liveIPs.extend(chunkOne)
-
     liveIPs.extend(chunkTwo)
     liveIPs.extend(chunkThree)
     liveIPs.extend(chunkFour)
@@ -97,39 +108,36 @@ def scanNetwork(self):
 
     #Just make sure 100 is printed at the end due to decimals and rounding
     self.trigger.emit(100)
-    '''
-    get arp table once all ips have been ping-ed
-    could run into problems getting arp on linux due to sudo
-    '''
-    arpTable = subprocess.Popen(['arp', '-a'], stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0].decode("utf-8")
 
     G=nx.Graph()
     G.add_node(str(myIpAddress))
     #print out the live IPs along with their mac addresses found from the arp table
-    for i in range(len(liveIPs)):
-        if(liveIPs[i] != myIpAddress):
-            macAddr = getMacAddr(currentOS, arpTable, liveIPs[i])
-            oldIpString = str(liveIPs[i])
-            newIPIndex = find(str(liveIPs[i]),'.')
-            newIpString = oldIpString[newIPIndex:len(str(liveIPs[i])) + 1]
-            #print(str(liveIPs[i]) + " (" + macAddr + ") is online")
-            G.add_node(newIpString)
-            edge = (newIpString, str(myIpAddress))
-            G.add_edge(*edge)
-        else:
-            macAddr = myMacAddress
+    try:
+        for i in range(len(liveIPs)):
+            if(liveIPs[i] != myIpAddress):
+                oldIpString = str(liveIPs[i])
+                newIPIndex = find(str(liveIPs[i]),'.')
+                newIpString = oldIpString[newIPIndex:len(str(liveIPs[i])) + 1]
+                G.add_node(newIpString)
+                edge = (newIpString, str(myIpAddress))
+                G.add_edge(*edge)
+    except Exception as e: print(str(e))
 
+
+    #Allow access to final graph and returned IPs
     global graphLocation
+    global liveIpAddresses
     graphLocation = G
+    liveIpAddresses = liveIPs
     self.trigger.emit(101)
 
 class SubScanner(threading.Thread):
     trigger = pyqtSignal(int)
 
-    def __init__(self, thread_no, currentOS,myIpAddress, listToScan,listToReturn):
+    def __init__(self, thread_no, myIpAddress, listToScan,listToReturn):
         threading.Thread.__init__(self)
         self.thread_no = thread_no
-        self.currentOS = currentOS
+        self.currentOS = platform.system()
         self.myIpAddress = myIpAddress
         self.listToScan = listToScan
         self.listToReturn = listToReturn
