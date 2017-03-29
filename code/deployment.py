@@ -1,22 +1,37 @@
-import datetime
-
+import socket
+import time
+from datetime import datetime
 from ftplib import FTP
 
 import paramiko
+import pymysql
 import xmltodict
-
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
-import time
-import socket
-import pymysql
 
-from imagebutton import ImageButton
-import messagewindow as msg
+import secondaryWindows
+from Connectivity import \
+    checkDatabaseConnection,\
+    checkConsoleConnection,\
+    checkFTPConnection,\
+    patch_crypto_be_discovery,\
+    waitForLogin,\
+    send_command,\
+    waitForTerm
+from customStyling import getTopBarLayout, IconLineEdit, getComboxboxStyle, ImageLable
+from settings import \
+    getIniConfPath, \
+    getOsPath, \
+    getDatabaseAddress, \
+    getDatabaseUsername, \
+    getFtpAddress, \
+    getFtpUsername, \
+    getConsoleAddress, \
+    getConsoleName, getDatabase, getDatabaseTable
 
-#global variable to save window state
 deploymentWindow = None
+
 
 class DeploymentModule:
     def __init__(self, window, layout):
@@ -27,44 +42,64 @@ class DeploymentModule:
         global deploymentWindow
         deploymentWindow = self
 
+        self.ftpPassword = window.passwordManager.getFtpPassword()
+        self.databasePassword = window.passwordManager.getDatabasePassword()
 
+    #PyQt5 GUI setup
     def deploymentUI(self, window):
         try:
-            self.consolePasswordField = QLineEdit()
-            self.fromPortNo = QLineEdit()
-            self.toPortNo = QLineEdit()
+            self.consolePasswordField = IconLineEdit('./images/key.png', "Console Server Password",True)
+            self.consolePasswordField.setWhatsThis("""This is the password for your console server it's required for the application to integrate with devices""")
+            self.initialDevicePassword = IconLineEdit('./images/key.png', "Initial Device Password", True)
+            self.initialDevicePassword.setWhatsThis("""You can choose what the initial password of each device will be, you can change individual device's password later on""")
+            self.fromPortNo = IconLineEdit('./images/from.png', "From Port No.",False)
+            self.fromPortNo.setWhatsThis("This is the FIRST port the devices are plugged into")
+            self.toPortNo = IconLineEdit('./images/to.png', "To Port No.",False)
+            self.toPortNo.setWhatsThis("This is the LAST port the devices are plugged into")
             self.willCloneToBackup = QCheckBox("Clone to Backup Partition")
-            self.dbPasswordField = QLineEdit()
+            self.willCloneToBackup.setWhatsThis("If you would like to have each device clone the os to the backup partition then click here, if it's not available on the device then leave this box unchecked")
             self.osVersions = QComboBox()
+            self.osVersions.setWhatsThis("Use this to select the OS you want to put on each device. it will be copied over from your FTP server to each device")
             self.fromConfiguration = QComboBox()
+            self.fromConfiguration.setWhatsThis("Choose the FIRST in the list of configurations to apply to the devices")
             self.toConfiguration = QComboBox()
-            verticalContainer = QVBoxLayout(window)
+            self.fromConfiguration.setWhatsThis("Choose the LAST in the list of configurations to apply to the devices")
+            verticalContainer = QVBoxLayout()
             verticalContainer.setObjectName("verticalContainer")
 
-            topBarLayout = QHBoxLayout()
-            topBarLayout.setObjectName("topBarLayout")
-            topBarLayout.setSpacing(750)
-
-            backButton = ImageButton(QPixmap("back.png"))
-            backButton.setObjectName("backButton")
-            backButton.clicked.connect(window.initialiseLauncher)
-            topBarLayout.addWidget(backButton)
-            refreshButton = ImageButton(QPixmap("refresh.png"))
-            refreshButton.setObjectName("refreshButton")
-            refreshButton.clicked.connect(self.refreshPage)
-            refreshButton.setStyleSheet("height: 50px;")
-            topBarLayout.addWidget(refreshButton)
-
+            topBarLayout = getTopBarLayout(self, window)
             verticalContainer.addLayout(topBarLayout)
 
             innerContainer = QHBoxLayout()
             innerContainer.setContentsMargins(0, 0, 0, 0)
             innerContainer.setObjectName("innerContainer")
 
+            loginHeadLayout = QVBoxLayout()
+            loginHeadLayout.addStretch()
+            loginHeadLayout.setSpacing(0)
+            loginLabel = ImageLable("images/hexagon.png", "Device Deployment Information           ")
+            loginLabel.setStyleSheet("background-color: rgb(0,188,212);font-size:16px;")
+            loginHeadLayout.addWidget(loginLabel.getWidget())
+
             loginFrame = QFrame()
             loginDetailsLayout = QGridLayout()
             loginDetailsLayout.setObjectName("loginDetailsLayout")
-            loginDetailsLayout.setVerticalSpacing(30)
+            loginDetailsLayout.setSpacing(36)
+
+            self.osVersions.setObjectName("self.osVersions")
+            self.osVersions.setStyleSheet(getComboxboxStyle())
+
+            # Connect to ftp and get files for updating os
+            self.osVersions.clear()
+            self.osVersions.addItem("Loading")
+            thread = FileGrabber(self.window)
+            thread.setup(self, ".tgz",self.ftpPassword)
+            thread.trigger.connect(self.fillComboBox)
+            thread.start()
+            self.threads.append(thread)
+
+            loginDetailsLayout.addWidget(self.osVersions, 0, 0, 1, 1)
+
             portNoLayout = QGridLayout()
             portNoLayout.setObjectName("portNoLayout")
             label = QLabel("   TO   ")
@@ -72,80 +107,44 @@ class DeploymentModule:
             label.setStyleSheet("color:white; font-size:16px; border: 1px solid rgb(96,125,139);")
             portNoLayout.addWidget(label, 0, 1, 1, 1)
 
-            self.fromPortNo.setObjectName("fromPortNo")
-            self.fromPortNo.setStyleSheet("background-color: rgb(255,255,255);")
-            self.fromPortNo.setPlaceholderText("> Port")
-            portNoLayout.addWidget(self.fromPortNo, 0, 0, 1, 1)
+            portNoLayout.addWidget(self.fromPortNo.getWidget(), 0, 0, 1, 1)
 
-            self.toPortNo.setObjectName("toPortNo")
-            self.toPortNo.setStyleSheet("background-color: rgb(255,255,255);")
-            self.toPortNo.setPlaceholderText(">> Port")
-            portNoLayout.addWidget(self.toPortNo, 0, 2, 1, 1)
+            portNoLayout.addWidget(self.toPortNo.getWidget(), 0, 2, 1, 1)
             loginDetailsLayout.addLayout(portNoLayout, 1, 0, 1, 1)
+
+            loginDetailsLayout.addWidget(self.consolePasswordField.getWidget(), 2, 0, 1, 1)
+
+            loginDetailsLayout.addWidget(self.initialDevicePassword.getWidget(), 3, 0, 1, 1)
+
             checkboxLayout = QVBoxLayout()
-            checkboxLayout.setObjectName("checkboxLayout")
 
-
-            self.willCloneToBackup.setObjectName("self.willCloneToBackup")
             self.willCloneToBackup.setStyleSheet("color:white; font-size:16px; border: 1px solid rgb(96,125,139);")
             checkboxLayout.addWidget(self.willCloneToBackup)
             loginDetailsLayout.addLayout(checkboxLayout, 4, 0, 1, 1)
-
-            deploymentButton = QPushButton("Begin Deployment")
-            deploymentButton.setObjectName("deploymentButton")
-            deploymentButton.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
-            deploymentButton.clicked.connect(startDeployment)
-            loginDetailsLayout.addWidget(deploymentButton, 6, 0, 1, 1)
-
-            self.consolePasswordField.setPlaceholderText("Console Server Password")
-            self.consolePasswordField.setEchoMode(QLineEdit.Password)
-            self.consolePasswordField.setStyleSheet("background-color: rgb(255,255,255);")
-            self.consolePasswordField.setObjectName("consolePasswordField")
-            loginDetailsLayout.addWidget(self.consolePasswordField, 2, 0, 1, 1)
-
-
-            self.dbPasswordField.setPlaceholderText("Database Server Password")
-            self.dbPasswordField.setEchoMode(QLineEdit.Password)
-            self.dbPasswordField.setStyleSheet("background-color: rgb(255,255,255);")
-            self.dbPasswordField.setObjectName("dbPasswordField")
-            loginDetailsLayout.addWidget(self.dbPasswordField, 3, 0, 1, 1)
-
-
-            self.osVersions.setObjectName("self.osVersions")
-            self.osVersions.setStyleSheet("background-color: rgb(255,255,255);")
-
-            # Connect to ftp and get files for updating os
-            self.osVersions.clear()
-            thread = FileGrabber(self.window)
-            thread.setup(self, ".tgz")
-            thread.trigger.connect(self.fillComboBox)
-            thread.start()
-            self.threads.append(thread)
-
-            loginDetailsLayout.addWidget(self.osVersions, 0, 0, 1, 1)
 
             configurationRangeFrame = QFrame()
             configurationRangeFrame.setContentsMargins(10, 1, 10, 1)
             configurationRangeLayout = QVBoxLayout()
             configurationRangeLayout.setObjectName("configurationRangeLayout")
             configurationRangeLayout.setSpacing(10)
-            configurationRangeHeading = QLabel("Inital Configuration Range(Optional)")
+            configurationRangeHeading = QLabel("Inital Configuration Range")
             configurationRangeHeading.setObjectName("configurationRangeHeading")
             configurationRangeHeading.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
             configurationRangeLayout.addWidget(configurationRangeHeading)
 
-
             self.fromConfiguration.setObjectName("fromConfiguration")
-            self.fromConfiguration.setStyleSheet("background-color: rgb(255,255,255);")
+            self.fromConfiguration.setStyleSheet(getComboxboxStyle())
 
             self.toConfiguration.setObjectName("toConfiguration")
-            self.toConfiguration.setStyleSheet("background-color: rgb(255,255,255);")
+            self.toConfiguration.setStyleSheet(getComboxboxStyle())
 
             # connect to ftp and get any files from ftp
             self.fromConfiguration.clear()
             self.toConfiguration.clear()
+            self.fromConfiguration.addItem("Loading")
+            self.toConfiguration.addItem("Loading")
             thread = FileGrabber(self.window)
-            thread.setup(self, ".conf")
+            thread.setup(self, ".conf",self.ftpPassword)
             thread.trigger.connect(self.fillComboBox)
             thread.start()
             self.threads.append(thread)
@@ -157,12 +156,26 @@ class DeploymentModule:
             loginDetailsLayout.addWidget(configurationRangeFrame, 5, 0, 1, 1)
             loginDetailsLayout.setAlignment(Qt.AlignCenter)
 
+            deploymentButton = QPushButton("Begin Deployment")
+            deploymentButton.setObjectName("deploymentButton")
+            deploymentButton.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
+            deploymentButton.clicked.connect(self.beginDeployment)
+            loginDetailsLayout.addWidget(deploymentButton, 6, 0, 1, 1)
+
+            displayDbButton = QPushButton("Display Database")
+            displayDbButton.setObjectName("displayDbButton")
+            displayDbButton.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
+            displayDbButton.clicked.connect(self.checkDatabase)
+            loginDetailsLayout.addWidget(displayDbButton, 7, 0, 1, 1)
+
             loginFrame.setLayout(loginDetailsLayout)
             loginFrame.setStyleSheet("background-color: rgb(96,125,139); border: 1px solid black; font-size:16px; ")
             loginEffect = QGraphicsDropShadowEffect()
             loginEffect.setBlurRadius(15)
             loginFrame.setGraphicsEffect(loginEffect)
-            innerContainer.addWidget(loginFrame)
+
+            loginHeadLayout.addWidget(loginFrame)
+            innerContainer.addLayout(loginHeadLayout)
 
             progressBarLayout = QGridLayout()
             progressBarLayout.setObjectName("progressBarLayout")
@@ -179,7 +192,7 @@ class DeploymentModule:
             self.progressBar.setTextVisible(False)
             self.progressBar.setTextDirection(QProgressBar.TopToBottom)
             self.progressBar.setObjectName("self.progressBar")
-            self.progressBar.setStyleSheet("QProgressBar::chunk:vertical { background-color: rgb(0,188,212);}")
+            self.progressBar.setStyleSheet("QProgressBar::chunk:vertical { background-color: rgb(0,188,212)}")
 
             progressBarLayout.addWidget(self.progressBar, 0, 0, 1, 1)
 
@@ -190,10 +203,15 @@ class DeploymentModule:
             progressTextLayout = QGridLayout()
 
             progressTextLayout.setObjectName("progressTextLayout")
-            deploymentProgressHeader = QLabel("Deployment Progress")
+            progressTextLayout.setSpacing(43)
+            deploymentProgressHeaderLayout = QVBoxLayout()
+            deploymentProgressHeaderLayout.setSpacing(0)
+            deploymentProgressHeaderLayout.addStretch()
+            deploymentProgressHeader = ImageLable('./images/tick.png', "Deployment Progress")
             deploymentProgressHeader.setObjectName("deploymentProgressHeader")
-            deploymentProgressHeader.setStyleSheet("background-color: rgb(0,188,212); border: 1px solid black; font-size:16px;")
-            progressTextLayout.addWidget(deploymentProgressHeader, 1, 0, 1, 1)
+            deploymentProgressHeader.setStyleSheet(
+                "background-color: rgb(0,188,212);font-size:16px; height: 20px;")
+            deploymentProgressHeaderLayout.addWidget(deploymentProgressHeader.getWidget())
 
             self.connectedToDevice = QLabel("Connect to the device")
             self.connectedToDevice.setObjectName("self.connectedToDevice")
@@ -241,15 +259,18 @@ class DeploymentModule:
             progressTextLayout.addWidget(self.deploymentSuccessful, 10, 0, 1, 1)
 
             progressTextFrame.setLayout(progressTextLayout)
-            progressTextFrame.setStyleSheet("background-color: rgb(96,125,139); border: 1px solid black; font-size:16px; ")
+            progressTextFrame.setStyleSheet(
+                "background-color: rgb(96,125,139); border: 1px solid black; font-size:16px; ")
             progressTextEffect = QGraphicsDropShadowEffect()
             progressTextEffect.setBlurRadius(15)
             progressTextFrame.setGraphicsEffect(progressTextEffect)
-            innerContainer.addWidget(progressTextFrame)
+            deploymentProgressHeaderLayout.addWidget(progressTextFrame)
+            innerContainer.addLayout(deploymentProgressHeaderLayout)
             verticalContainer.addLayout(innerContainer)
 
             self.layout.setLayout(verticalContainer)
-        except Exception as e: print(str(e))
+        except Exception as e:
+            print(str(e))
 
     def clearProgressText(self):
         self.connectedToDevice.setStyleSheet("color:white; font-size:16px;border: 1px solid rgb(96,125,139);")
@@ -264,191 +285,272 @@ class DeploymentModule:
 
     def updateProgress(self, percentage):
         self.progressBar.setValue(percentage)
-        if (percentage == 11):
+        if percentage == 11:
             self.connectedToDevice.setStyleSheet("color:white; font-size:16px;")
-        elif (percentage == 22):
+        elif percentage == 22:
             self.loggedIn.setStyleSheet("color:white; font-size:16px;")
-        elif (percentage == 44):
+        elif percentage == 44:
             self.downloadingOS.setStyleSheet("color:white; font-size:16px;")
             self.installingOS.setStyleSheet("color:white; font-size:16px;")
-        elif (percentage == 55):
+        elif percentage == 55:
             self.rebootingDevice.setStyleSheet("color:white; font-size:16px;")
-        elif (percentage == 66):
+        elif percentage == 66:
             self.loggedInAgain.setStyleSheet("color:white; font-size:16px;")
-        elif (percentage == 77):
+        elif percentage == 77:
             self.applyingConfig.setStyleSheet("color:white; font-size:16px;")
-        elif (percentage == 88):
+        elif percentage == 88:
             self.rebootingTheDeviceAgain.setStyleSheet("color:white; font-size:16px;")
         else:
-            self.blocked=False
+            self.blocked = False
             self.deploymentSuccessful.setStyleSheet("color:white; font-size:16px;")
 
-    #fill appropriate combo box when code from thread is returned
-    def fillComboBox(self,code):
-        #deal with conf or tgz depending on code
+    # fill appropriate combo box when code from thread is returned
+    def fillComboBox(self, code):
+        # deal with conf or tgz depending on code
         if code == 0:
+            self.fromConfiguration.clear()
+            self.toConfiguration.clear()
             for index in range(len(self.confFiles)):
-                self.fromConfiguration.addItem(self.confFiles[index])
-                self.toConfiguration.addItem(self.confFiles[index])
+                self.fromConfiguration.addItem(QIcon("images/from.png"),self.confFiles[index])
+                self.toConfiguration.addItem(QIcon("images/to.png"),self.confFiles[index])
         elif code == 1:
+            self.osVersions.clear()
             for index in range(len(self.osFiles)):
-                deploymentWindow.osVersions.addItem(self.osFiles[index])
+                self.osVersions.addItem(QIcon("images/device.png"),self.osFiles[index])
 
-
+    # Refresh current page
     def refreshPage(self):
         try:
-            if (self.blocked):
-                msg.messageWindow("Process is currently running", "Cannot refresh page when units are being updated",
+            if self.blocked:
+                secondaryWindows.messageWindow("Process is currently running", "Cannot refresh page when units are being updated",
                                   False)
             else:
-                self.threads.clear()
+                self.fromConfiguration.addItem("Loading")
+                self.toConfiguration.addItem("Loading")
+                self.osVersions.addItem("Loading")
                 self.clearProgressText()
                 self.fromConfiguration.clear()
                 self.toConfiguration.clear()
                 thread = FileGrabber(self.window)
-                thread.setup(self,".conf")
+                thread.setup(self, ".conf",self.ftpPassword)
                 thread.trigger.connect(self.fillComboBox)
                 thread.start()
                 self.threads.append(thread)
 
-                self.osVersions.clear()
                 thread = FileGrabber(self.window)
-                thread.setup(self, ".tgz")
+                thread.setup(self, ".tgz",self.ftpPassword)
                 thread.trigger.connect(self.fillComboBox)
                 thread.start()
                 self.threads.append(thread)
 
-                self.dbPasswordField.setText("")
+                self.initialDevicePassword.setText("")
                 self.consolePasswordField.setText("")
                 self.willCloneToBackup.setChecked(False)
                 self.toPortNo.setText("")
                 self.fromPortNo.setText("")
         except Exception as e:
-            msg.messageWindow("Error Refreshing","An error occured clearing page and connecting to FTP server, try again later",True)
+            print(str(e))
+            secondaryWindows.messageWindow("Error Refreshing",
+                              "An error occured clearing page and connecting to FTP server, try again later", True)
 
-#File grabber class to get files off UI thread
+    def checkDatabase(self):
+        if self.blocked:
+            secondaryWindows.messageWindow("Process Running",
+                                           "You're currently runnning an update, wait till this is finished",
+                                           True)
+            return
+
+        if not checkDatabaseConnection(self.databasePassword):
+            secondaryWindows.messageWindow("Database: Connection Error",
+                                           "Error raised when connecting to Database, please check your details and try again",
+                                           True)
+            return
+
+        listing = getDatabaseListing(self.databasePassword)
+        if not listing is None:
+            secondaryWindows.displayDatabaseWindow(listing)
+        elif listing is None:
+            secondaryWindows.messageWindow("Database is empty",
+                                           "There is no data to pull from your database",
+                                           False)
+            return
+        elif listing is "Error":
+            secondaryWindows.messageWindow("Database Error",
+                                           "There was an error pulling data from your database",
+                                           True)
+
+    def isNumber(self,s):
+        try:
+            int(s)
+            return True
+        except ValueError:
+            return False
+
+    # makes sure there is at least one number in the password adn the length is > 6
+    def checkValidity(self,string):
+        if len(string) < 6:
+            return False
+        for i in range(0,len(string)):
+            if self.isNumber(string[i]):
+                return True
+            elif string[i].isupper():
+                return True
+
+        return False
+
+    def beginDeployment(self):
+        try:
+            # if the window is pressed twice
+            if self.blocked:
+                secondaryWindows.messageWindow("Process running.", "Please wait for deployment to finish.", True)
+                return
+            self.threads.clear()
+            # Make sure fields aren't empty
+            if self.fieldsEmpty():
+                secondaryWindows.messageWindow("Empty Fields", "Please ensure all the fields are filled", True)
+                return
+            # Make sure both port numbers are actually numbers
+            if (not isNumber(self.toPortNo.text()) or not isNumber(self.fromPortNo.text())):
+                secondaryWindows.messageWindow("Not a Number", "Please ensure ports are numbers", True)
+                return
+
+            # make sure configurations are the same amount as devices being updated
+            fromConf = self.fromConfiguration.currentIndex()
+            toConf = self.toConfiguration.currentIndex()
+            fromPort = int(self.fromPortNo.text())
+            toPort = int(self.toPortNo.text())
+            if not (toConf >= fromConf):
+                secondaryWindows.messageWindow("Config List Error",
+                                               "Please ensure your starting configuration is before your final configuration",
+                                               True)
+                return
+            if not ((toConf - fromConf) + 1 == (toPort - fromPort) + 1):
+                secondaryWindows.messageWindow("Not Enough Configs",
+                                               "Please ensure there are enough config files for each specified device",
+                                               True)
+                return
+
+            devicePassword = self.initialDevicePassword.text()
+            if not self.checkValidity(devicePassword):
+                secondaryWindows.messageWindow("Password error",
+                                               """
+                                               Please ensure the password is at least 6 characters and contains
+                                               either a number or an uppercase letter
+                                               """,
+                                               True)
+                return
+
+            # apply patch
+            patch_crypto_be_discovery()
+            configurationsToUse = []
+            for index in range(fromConf, toConf + 1):
+                configurationsToUse.append(self.confFiles[index])
+
+            willBackup = self.willCloneToBackup.isChecked()
+            OsFile = self.osVersions.currentText()
+            ftpPassword = self.ftpPassword
+            consolePassword = self.consolePasswordField.text()
+            databasePassword = self.databasePassword
+            self.progressBar.setValue(0)
+
+            # check if connections are accessible
+            if not checkFTPConnection(ftpPassword):
+                secondaryWindows.messageWindow("FTP: Connection Error",
+                                               "Error raised when connecting to FTP server, please check your details and try again",
+                                               True)
+                return
+
+            if not checkConsoleConnection(getConsoleAddress(), getConsoleName(), consolePassword):
+                secondaryWindows.messageWindow("Console Server: Connection Error",
+                                               "Error raised when connecting to Console server, please check your details and try again",
+                                               True)
+                return
+
+            if not checkDatabaseConnection(databasePassword):
+                secondaryWindows.messageWindow("Database: Connection Error",
+                                               "Error raised when connecting to Database, please check your details and try again",
+                                               True)
+                return
+
+            self.blocked = True
+
+            confIndex = 0
+
+            # check to see how many devices we're updating
+            if toPort - fromPort + 1 == 1:
+                thread = Updater(self.window)
+                thread.trigger.connect(self.updateProgress)
+                thread.setup(toPort, ftpPassword, consolePassword, databasePassword, devicePassword,OsFile, configurationsToUse[confIndex],
+                             willBackup,
+                             True)
+                thread.start()
+                self.threads.append(thread)
+
+            else:
+                for index in range(fromPort, toPort):
+                    thread = Updater(self.window)
+                    thread.trigger.connect(self.updateProgress)
+                    thread.setup(index, ftpPassword, consolePassword, databasePassword, devicePassword, OsFile, configurationsToUse[confIndex],
+                                 willBackup,
+                                 False)
+                    thread.start()
+                    self.threads.append(thread)
+                    confIndex += 1
+                    time.sleep(5)  # staggered threads to avoid collision
+
+                # make final thread the one to update GUI
+                thread = Updater(self.window)
+                thread.trigger.connect(self.updateProgress)
+                thread.setup(toPort, ftpPassword, consolePassword, databasePassword, devicePassword, OsFile, configurationsToUse[confIndex],
+                             willBackup,
+                             True)
+                thread.start()
+                self.threads.append(thread)
+        except Exception as e:
+            print(str(e))
+
+    def fieldsEmpty(self):
+        if len(self.fromPortNo.text()) < 1 or len(self.toPortNo.text()) < 1 or len(
+                self.consolePasswordField.text()) < 1:
+            return True
+        else:
+            return False
+
+
+# File grabber class to get files off UI thread
 class FileGrabber(QThread):
     trigger = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super(FileGrabber, self).__init__(parent)
 
-    def setup(self, deploymentWindow,extension):
+    def setup(self, deploymentWindow, extension, password):
         self.deploymentWindow = deploymentWindow
         self.extension = extension
+        self.password = password
 
     def run(self):
-        if  "conf" in self.extension:
-            deploymentWindow.confFiles = getFiles(self.extension)
+        if "conf" in self.extension:
+            self.deploymentWindow.confFiles = getFiles(self.extension, self.password)
             self.trigger.emit(0)
         else:
-            deploymentWindow.osFiles = getFiles(self.extension)
+            self.deploymentWindow.osFiles = getFiles(self.extension, self.password)
             self.trigger.emit(1)
 
-
-#launch the beginDeployment method through this in the .connect of the ui
-def startDeployment(self):
-    global deploymentWindow
-    beginDeployment(deploymentWindow)
-
-def beginDeployment(deploymentWindow):
-    try:
-        #if the window is pressed twice
-        if deploymentWindow.blocked:
-            msg.messageWindow("Process running.", "Please wait for deploymentto finish.", True)
-            return
-        deploymentWindow.threads.clear()
-        # Make sure fields aren't empty
-        if fieldsEmpty(deploymentWindow):
-            msg.messageWindow("Empty Fields", "Please ensure all the fields are filled",True)
-            return
-        # Make sure both port numbers are actually numbers
-        if (not isNumber(deploymentWindow.toPortNo.text()) or not isNumber(deploymentWindow.fromPortNo.text())):
-            msg.messageWindow("Not a Number", "Please ensure ports are numbers",True)
-            return
-
-        # make sure configurations are the same amount as devices being updated
-        fromConf = deploymentWindow.fromConfiguration.currentIndex()
-        toConf = deploymentWindow.toConfiguration.currentIndex()
-        fromPort = int(deploymentWindow.fromPortNo.text())
-        toPort = int(deploymentWindow.toPortNo.text())
-        if (not (toConf >= fromConf)):
-            msg.messageWindow("Config List Error","Please ensure your starting configuration is before your final configuration", True)
-            return
-        if (not ((toConf - fromConf) + 1 == (toPort - fromPort) + 1)):
-            msg.messageWindow("Not Enough Configs","Please ensure there are enough config files for each specified device",True)
-            return
-
-        # apply patch
-        patch_crypto_be_discovery()
-        configurationsToUse = []
-        for index in range(fromConf, toConf + 1):
-            configurationsToUse.append(deploymentWindow.confFiles[index])
-
-        willBackup = deploymentWindow.willCloneToBackup.isChecked()
-        OsFile = deploymentWindow.osVersions.currentText()
-        consolePassword = deploymentWindow.consolePasswordField.text()
-        databasePassword = deploymentWindow.dbPasswordField.text()
-        deploymentWindow.progressBar.setValue(0)
-
-        deploymentWindow.blocked = True
-
-        confIndex = fromConf
-        # check to see how many devices we're updating
-        if (toPort - fromPort + 1 == 1):
-            thread = Updater(deploymentWindow.window)
-            thread.trigger.connect(deploymentWindow.updateProgress)
-            thread.setup(toPort, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex], willBackup,
-                         True)
-            thread.start()
-            deploymentWindow.threads.append(thread)
-
-        else:
-            confIndex = 0
-            for index in range(fromPort, toPort):
-                thread = Updater(deploymentWindow.window)
-                thread.trigger.connect(deploymentWindow.updateProgress)
-                thread.setup(index, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex],
-                             willBackup,
-                             False)
-                thread.start()
-                deploymentWindow.threads.append(thread)
-                confIndex += 1
-                time.sleep(2)#staggered threads to avoid collision
-
-            # make final thread the one to update GUI
-            thread = Updater(deploymentWindow.window)
-            thread.trigger.connect(deploymentWindow.updateProgress)
-            thread.setup(toPort, consolePassword, databasePassword, OsFile, configurationsToUse[confIndex], willBackup,
-                         True)
-            thread.start()
-            deploymentWindow.threads.append(thread)
-    except Exception as e:
-        print(str(e))
-
-
-def fieldsEmpty(deploymentWindow):
-    if (len(deploymentWindow.fromPortNo.text()) < 1 or len(deploymentWindow.toPortNo.text()) < 1 or len(deploymentWindow.consolePasswordField.text()) < 1):
-        return True
-    else:
-        return False
-
-def getFiles(extension):
+def getFiles(extension,password):
     try:
         # anonymous login so no password
-        if ("conf" in extension):
+        if "conf" in extension:
             # set the ftp path to the config files location
             path = getIniConfPath()
         else:
             # set the ftp path to the os files location
             path = getOsPath()
         address = getFtpAddress()
-        # don't need to specifiy port in localhost
-        if 'localhost' in address:
-            ftp = FTP(address)
-        else:
-            ftp = FTP(address, '21')
-        ftp.login('anonymous', '')
+        username = getFtpUsername()
+        # Log into FTP
+        ftp = FTP(address)
+        ftp.login(username,password)
         ftp.cwd(path)
 
         # get list of all the files in the directory
@@ -456,15 +558,16 @@ def getFiles(extension):
         actualFiles = []
         # add all the files with the appropriate extension to the list
         for index in range(len(files)):
-            if (extension in files[index]):
+            if extension in files[index]:
                 actualFiles.append(files[index])
-        actualFiles.reverse()
+        ftp.quit()
         return actualFiles
 
-    except:
-        return []
+    except Exception as e:
+        print(str(e))
+        return [] #just return empty list no need for error
 
-
+# Check if a number is given
 def isNumber(number):
     try:
         int(number)
@@ -473,293 +576,277 @@ def isNumber(number):
     else:
         return True
 
-
+# Thread updater
 class Updater(QThread):
     trigger = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super(Updater, self).__init__(parent)
 
-    def setup(self, thread_no,consolePassword,databsePassword,OsFile,configFile,willClone,isGUIUpdater):
+    def setup(self, thread_no,ftpPassword,consolePassword, databsePassword, devicePassword, OsFile, configFile, willClone, isGUIUpdater):
         self.thread_no = thread_no
+        self.ftpPassword = ftpPassword
         self.databsePassword = databsePassword
         self.consolePassword = consolePassword
+        self.devicePassword = devicePassword
         self.willClone = willClone
         self.configFile = configFile
         self.isGUIUpdater = isGUIUpdater
         self.OsFile = OsFile
 
     def run(self):
-        self.connect_session(self.thread_no,self.consolePassword,self.databsePassword,self.OsFile,self.configFile,self.willClone,self.isGUIUpdater)
+        self.connect_session(self.thread_no, self.ftpPassword,self.consolePassword, self.databsePassword,self.devicePassword  ,self.OsFile, self.configFile,
+                             self.willClone, self.isGUIUpdater)
 
-
-    def connect_session(self,portNo, consolePassword,databasePassword,OsFile,configFile,willClone,updateGui):
+    #Mian module functionality
+    def connect_session(self, portNo, ftpPassword,consolePassword, databasePassword,devicePassword ,OsFile, configFile, willClone, updateGui):
         try:
+            # Get values from user input
             ftpAddress = getFtpAddress()
             osFile = getOsPath() + OsFile
             confPath = getIniConfPath() + configFile
             username = getConsoleName() + ":" + str(portNo)
             hostname = getConsoleAddress()
 
+            # Connect to the console server
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh.connect(hostname, 22, username, consolePassword)
             term = ssh.invoke_shell()
-            if(updateGui):
+
+            # Log into the device
+            if updateGui:
                 self.trigger.emit(11)
-            check(term, 5, "login")
-            _login(term)
-            if (updateGui):
+            waitForTerm(term, 60, "login:")
+            waitForLogin(term,devicePassword)
+            if updateGui:
                 self.trigger.emit(22)
             send_command(term, "set cli screen-length 0")
 
-            #---parsing for serial---
+            # Get device serial number
             originalVersion = send_command(term, "show system software")
             xml = send_command(term, "show chassis hardware | display xml")
-            xml = xml[37:(len(xml)) - 10]
             serialNo = parse_xml_serial(xml)
-            #push serial to database
-            updatedTime = pushSerial(getDatabaseAddress(),getDatabaseUsername(),databasePassword,serialNo,confPath)
-            if (updateGui):
+
+            # Push serial number to the database
+            updatedTime = pushSerial(getDatabaseAddress(), getDatabaseUsername(), databasePassword,getDatabase(), configFile, serialNo, confPath)
+            if updateGui:
                 self.trigger.emit(44)
-            #---upgrade os---
-            upgradeOs = "request system software add ftp://"+ftpAddress+osFile+" no-copy no-validate reboot"
 
-            send_command(term,upgradeOs)
+            # Upgrade JUNOS
+            ftpDetails = getFtpUsername() + ":" + ftpPassword + "@" + ftpAddress
+            upgradeOs = "request system software add ftp://" + ftpDetails + osFile + " no-copy no-validate reboot"
+            send_command(term, upgradeOs)
 
-            if (updateGui):
+            # Wait for the device to reboot
+            if updateGui:
                 self.trigger.emit(55)
             print("upgrading")
-            check(term, 60, "login")
+            waitForTerm(term, 180, "login:")
             print("finished")
-            _login(term)
-
-            if (updateGui):
+            waitForLogin(term,devicePassword)
+            if updateGui:
                 self.trigger.emit(66)
-
-            #---partition snapshot---
-            if(willClone):
-                send_command(term, "request system snapshot media internal slice alternate")
-
-            check(term, 60, "root")
+            waitForTerm(term, 2, "root")
             send_command(term, "set cli screen-length 0")
 
-            #junos version check
+            # Snapshot to the backup partition
+            if willClone:
+                send_command(term, "request system snapshot media internal slice alternate")
+            time.sleep(15)
+            waitForTerm(term, 60, "root")
+
+            # Check the version of JUNOS
             updatedVersion = send_command(term, "show system software")
-            if (updateGui):
+            if updateGui:
                 self.trigger.emit(77)
+
+            # Start applying a configuration to the device
             if not updatedVersion == originalVersion:
                 send_command(term, "configure")
-                send_command(term, "delete /yes")
-                send_command(term, "load set ftp://"+ ftpAddress + confPath)
-
-                #---Agile Networks requirement --> Will be reomoved for the production version---
+                time.sleep(2)
+                send_command(term, "delete")
+                time.sleep(2)
+                send_command(term, "yes")
+                time.sleep(2)
+                # Get the configuration file from the FTP Server
+                send_command(term, "load set ftp://" + ftpAddress + confPath)
+                time.sleep(2)
                 xml = send_command(term, "show snmp location | display xml")
-                xml = xml[34:(len(xml)) - 15]
-                rollNo = parse_xml_rollNo(xml)
-                #push roll number to database
-                pushRollNo(getDatabaseAddress(), getDatabaseUsername(), databasePassword, rollNo, updatedTime)
+                time.sleep(2)
 
+                # Get device deployment location (rollNo)
+                rollNo = ""
+                try:
+                    xml = xml.split("<rpc-reply")[1]
+                    xml = "<rpc-reply" + xml
+                    xml = xml.split("</rpc-reply>")[0]
+                    xml += "</rpc-reply>"
+                    xmlDict = xmltodict.parse(xml)
+                    rollNo = xmlDict['rpc-reply']['configuration']['snmp']['location']
+                except:
+                    print ("No location data.")
+                time.sleep(5)
+
+                # Push roll number (deployment location) to the database
+                pushRollNo(getDatabaseAddress(), getDatabaseUsername(), databasePassword,getDatabase(),rollNo, updatedTime)
+                time.sleep(5)
+
+                #Set device root password
+                send_command(term,"set system root-authentication plain-text-password")
+                send_command(term,devicePassword)
+                send_command(term,devicePassword) #confirm password
+                time.sleep(2)
+
+                #Commit the current configuration
                 send_command(term, "commit and-quit")
-                check(term, 60, "root")
+                waitForTerm(term, 60, "root@")
+                send_command(term, "request system autorecovery state save")
+                time.sleep(30)
+                send_command(term, "request system configuration rescue save")
+                time.sleep(30)
+
+                # Update the progress bar
+                if updateGui:
+                    self.trigger.emit(88)
+
+                # Reboot the device
                 send_command(term, "request system reboot")
                 time.sleep(2)
                 send_command(term, "yes")
+
+                #Wait for the device to boot
+                waitForTerm(term, 180, "login:")
+                time.sleep(2)
+
+                # Log into the device
+                waitForLogin(term, devicePassword)
+                waitForTerm(term, 10, "root")
+                xml = send_command(term, "show configuration snmp location | display xml")
+                time.sleep(5)
+
+                # Get device deployment location (rollNo) - in order to perform a final check
+                checkRollNo=""
+                try:
+                    xml = xml.split("<rpc-reply")[1]
+                    xml = "<rpc-reply" + xml
+                    xml = xml.split("</rpc-reply>")[0]
+                    xml += "</rpc-reply>"
+                    xmlDict = xmltodict.parse(xml)
+                    checkRollNo = xmlDict['rpc-reply']['configuration']['snmp']['location']
+                except:
+                    print("No location data.")
+
+                if rollNo == checkRollNo:
+                    print("Deployment successful.")
+                    send_command(term, "request system halt in 0")
+                    time.sleep(2)
+                    send_command(term, "yes")
+
+                if updateGui:
+                    self.trigger.emit(100)
             else:
-                QMessageBox.information(self, "Error updating SerialNo: " + serialNo, "OS wasn't updated correctly, Not applying config, Shutting down")
+                print("OS wasn't updated correctly, Not applying config, Shutting down")
 
-            if (updateGui):
-                self.trigger.emit(88)
-            send_command(term, "request system halt in 0")
-            time.sleep(2)
-            send_command(term, "yes")
-            ssh.close()
-            if (updateGui):
-                self.trigger.emit(100)
         except paramiko.ssh_exception.BadHostKeyException:
-            msg.messageWindow("Host Key Error!", "Server’s host key could not be verified",True)
+            secondaryWindows.messageWindow("Host Key Error!", "Server’s host key could not be verified", True)
         except paramiko.ssh_exception.AuthenticationException:
-            msg.messageWindow("Authentication Error!","Authentication failed, Check your details and try again",True)
+            secondaryWindows.messageWindow("Authentication Error!", "Authentication failed, Check your details and try again", True)
         except paramiko.ssh_exception.SSHException:
-            msg.messageWindow("Unknown Error!", "Unknown error connecting or establishing an SSH session",True)
-        except socket.gaierror as e: print(str(e))
+            secondaryWindows.messageWindow("Unknown Error!", "Unknown error connecting or establishing an SSH session", True)
+        except socket.gaierror as e:
+            print(str(e))
 
-# Credit to exvito for patch
-# link: https://github.com/pyca/cryptography/issues/2039
-def patch_crypto_be_discovery():
-    """
-    Monkey patches cryptography's backend detection.
-    Objective: support pyinstaller freezing.
-    """
-    from cryptography.hazmat import backends
-
-    try:
-        from cryptography.hazmat.backends.commoncrypto.backend import backend as be_cc
-    except ImportError:
-        be_cc = None
-
-    try:
-        from cryptography.hazmat.backends.openssl.backend import backend as be_ossl
-    except ImportError:
-        be_ossl = None
-
-    backends._available_backends_list = [
-        be for be in (be_cc, be_ossl) if be is not None
-        ]
-
-def pushSerial(dbAddress, dbUsername, dbPassword, serialNo, configFile):
-
+# Push the device serial nuber to the database
+def pushSerial(dbAddress, dbUsername, dbPassword,db ,configFileName, serialNo, configFile):
     time = getTime()
-    configTable = getDatabaseConfTable()
+    configFileName = configFileName.split(".conf")[0]
+    configTable = 'configurations'
+    sql = ("insert into " + configTable + "(name,serial,user,path,timestamp,isprimary) values (\"" + configFileName + "\", \"" + serialNo + "\",\"" + dbUsername + "\",\"" + configFile + "\",\"" + time + "\",1)")
 
-    conn = pymysql.connect(host=dbAddress, port=3306, user=dbUsername, passwd=dbPassword, db='runbook')
-    cursor = conn.cursor()
+    conn = None
 
-    sql = ("insert into " + configTable + "(serial,user,path,timestamp,isprimary) values (\""+serialNo+"\",\""+dbUsername+"\",\""+configFile+"\",\""+time+"\",1)")
-
-    #Push the data to the database
     try:
+        conn = pymysql.connect(host=dbAddress, port=3306, user=dbUsername, passwd=dbPassword, db=db)
+        cursor = conn.cursor()
         cursor.execute(sql)
         conn.commit()
-        id = cursor.execute(sql)
-    except:
-        conn.rollback()
+        conn.close()
 
-    conn.close()
+    except Exception as e:
+        print("Error connecting to the database: " + str(e))
+        if not cursor is None:
+            cursor.close()
+        if not conn is None:
+            conn.close()
+        return "Error"
+
     return time
 
-def pushRollNo(dbAddress, dbUsername, dbPassword, rollNo, updatedTime):
-    configTable = getDatabaseConfTable()
-    conn = pymysql.connect(host=dbAddress, port=3306, user=dbUsername, passwd=dbPassword, db='runbook')
-    cursor = conn.cursor()
+# Push the device location to the database
+def pushRollNo(dbAddress, dbUsername, dbPassword,db ,rollNo, updatedTime):
+    configTable = 'configurations'
+    sql = ("update " + configTable + " set title=\"Initial Configuration\", description=\"" + rollNo + "\" where timestamp=\"" + updatedTime + "\"")
 
-    sql = ("update " + configTable + " set title=\"Initial Configuration\", description=\""+rollNo+"\" where timestamp=\""+ updatedTime+"\"")
+    conn = None
 
-    #Push the data to the database
     try:
+        conn = pymysql.connect(host=dbAddress, port=3306, user=dbUsername, passwd=dbPassword, db=db)
+        cursor = conn.cursor()
         cursor.execute(sql)
         conn.commit()
-    except:
-        conn.rollback()
+    except Exception as e:
+        print("Error connecting to the database: " + str(e))
+        if not cursor is None:
+            cursor.close()
+        if not conn is None:
+            conn.close()
+        return "Error"
 
-    conn.close()
-
-def send_command(term, cmd):
-    term.send(cmd + "\n")
-    time.sleep(3)
-    output = term.recv(2024)
-    # Convert byte output to string
-    fOutput = output.decode("utf-8")
-    # print(fOutput)
-    return fOutput
-
+# Parse the xml output for the device serial number
 def parse_xml_serial(xml):
     try:
-        xmlDict= xmltodict.parse(xml)
+        xml = xml.split("<rpc-reply")[1]
+        xml = "<rpc-reply" + xml
+        xml = xml.split("</rpc-reply>")[0]
+        xml += "</rpc-reply>"
+        xmlDict = xmltodict.parse(xml)
         return xmlDict['rpc-reply']['chassis-inventory']['chassis']['serial-number']
-
     except:
         return "Serial number parsing error."
 
-def parse_xml_rollNo(xml):
-    try:
-        xmlDict= xmltodict.parse(xml)
-        return xmlDict['rpc-reply']['configuration']['snmp']['location']
-
-    except:
-        return "Roll number parsing error."
-
-def check(term, timeToWait, promptToWaitFor):
-    timesChecked = 1
-    ready = False
-    while (not ready):
-        time.sleep(timeToWait)
-        answer = send_command(term, "")
-        print(answer)
-        if (promptToWaitFor in answer):
-            ready = True
-        timesChecked = timesChecked + 1
-
-def _login(term):
-    send_command(term, "root")
-    send_command(term, "")
-    send_command(term, "cli")
-
-def getFtpAddress():
-    try:
-        with open("Settings.xml") as file:
-            settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Ftp-Info']['ftpServerAddress']
-    except:
-        return ""
-
-def getOsPath():
-    try:
-        with open("Settings.xml") as file:
-            settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Ftp-Info']['ftpOsPath']
-    except:
-        return ""
-
-def getConfPath():
-    try:
-        with open("Settings.xml") as file:
-            settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Ftp-Info']['ftpConfPath']
-    except:
-        return ""
-
-def getIniConfPath():
-    try:
-        with open("Settings.xml") as file:
-            settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Ftp-Info']['ftpIniConfPath']
-    except:
-        return ""
-
-
-def getConsoleName():
-    try:
-        with open("Settings.xml") as file:
-            settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Console-Info']['consoleUsername']
-    except:
-        return ""
-
-
-def getConsoleAddress():
-    try:
-        with open("Settings.xml") as file:
-            settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Console-Info']['consoleAddress']
-    except:
-        return ""
-
-
-def getDatabaseAddress():
-    try:
-        with open("Settings.xml") as file:
-            settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Database-Info']['databseAddress']
-    except:
-        return ""
-
-
-def getDatabaseUsername():
-    try:
-        with open("Settings.xml") as file:
-            settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Database-Info']['databseUsername']
-    except:
-        return ""
-
-def getDatabaseConfTable():
-    try:
-        with open("Settings.xml") as file:
-            settingsDict = xmltodict.parse(file.read())
-        return settingsDict['Settings']['Database-Info']['configTable']
-    except:
-        return ""
-
+# Generate a timestamp
 def getTime():
-    return '{:%H:%M:%S %d-%m-%Y}'.format(datetime.datetime.now())
+    return datetime.utcnow().strftime('%d-%m-%Y %H:%M:%S.%f')[:-4]
+
+# Get a listing of up to 100 elements in the database
+def getDatabaseListing(dbPswd):
+    dbAddr = getDatabaseAddress()
+    dbUsr = getDatabaseUsername()
+    database = getDatabase()
+    table = getDatabaseTable()
+
+    conn = None
+    cursor = None
+
+    try:
+        conn = pymysql.connect(host=dbAddr, port=3306, user=dbUsr, passwd=dbPswd, db=database)
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM "+ table+" limit 100;") # return a limit of 100 listings
+        response = cursor.fetchall()
+        if response:  # if we've returned something
+            cursor.close()
+            conn.close()
+            return response
+        else:
+            cursor.close()
+            conn.close()
+            return None
+    except pymysql.OperationalError:
+        return None
+    except:  # any issue assume no clear connection to database
+        if not cursor is None:
+            cursor.close()
+        if not conn is None:
+            conn.close()
+        return "Error"

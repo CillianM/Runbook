@@ -1,0 +1,1 @@
+The address of our timestamped blogs is: https://gitlab.computing.dcu.ie/mcneilc2/2017-CA326-Cillian-Network_Deployment_Automation_Maintenance_Tool/wikis/pages

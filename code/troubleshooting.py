@@ -1,108 +1,116 @@
 import networkx as nx
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import paramiko
+import xmltodict
+
+import deployment
+import secondaryWindows
 from PyQt5.QtCore import *
-from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as Canvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Toolbar
 
+from Connectivity import patch_crypto_be_discovery, isJunosDevice
+from customStyling import getTopBarLayout, IconLineEdit, ImageLable
+from scanner import Scanner
 
-import scanner
-import os.path
-from imagebutton import ImageButton
-import messagewindow as msg
 
 class TroubleshootingModule:
     def __init__(self, window, layout):
         self.window = window
         self.layout = layout
         self.blocked = False
-        self.threads = []
+        self.statisticsText=None
 
-    def troubleshootingUI(self,window):
+        # Network map window variables
+        self.figure = None
+        self.canvas = None
+        self.nodePositioning = None
+
+        self.scanner = Scanner()
+
+    # Creating the troubleshooting module GUI
+    def troubleshootingUI(self, window):
         try:
-            verticalContainer = QVBoxLayout(window)
+            verticalContainer = QVBoxLayout()
             verticalContainer.setObjectName("verticalContainer")
 
-            topBarLayout = QHBoxLayout(window)
-            topBarLayout.setObjectName("topBarLayout")
-            topBarLayout.setSpacing(750)
-
-            backButton = ImageButton(QPixmap("back.png"))
-            backButton.setObjectName("backButton")
-            backButton.clicked.connect(window.initialiseLauncher)
-            topBarLayout.addWidget(backButton)
-            refreshButton = ImageButton(QPixmap("refresh.png"))
-            refreshButton.setObjectName("refreshButton")
-            refreshButton.clicked.connect(self.refreshPage)
-            refreshButton.setStyleSheet("height: 50px;")
-            topBarLayout.addWidget(refreshButton)
-
+            topBarLayout = getTopBarLayout(self, window)
             verticalContainer.addLayout(topBarLayout)
-            innerContainer = QHBoxLayout(window)
+
+            innerContainer = QHBoxLayout()
             innerContainer.setContentsMargins(0, 0, 0, 0)
             innerContainer.setObjectName("innerContainer")
 
+            loginHeadingLayout = QVBoxLayout()
+            loginHeadingLayout.setSpacing(0)
+            loginLabel = ImageLable('./images/hexagon.png', "Log Into a Device")
+            loginLabel.setWhatsThis("Allows you to get more detailed information by logging into the device")
+            loginLabel.setStyleSheet("background-color: rgb(0,188,212);border-top-left-radius: 10px;border-top-right-radius: 10px;font-size:16px;")
+            loginHeadingLayout.addWidget(loginLabel.getWidget())
+
             detailsContainer = QVBoxLayout()
             loginContainer = QVBoxLayout()
-            loginLabel = QLabel("Log into a device")
-            loginLabel.setStyleSheet("background-color: rgb(0,188,212); border: 1px solid black; font-size:16px;")
-            loginContainer.addWidget(loginLabel)
-            self.deviceAddress = QLineEdit()
-            self.deviceAddress.setPlaceholderText("Device Address")
-            loginContainer.addWidget(self.deviceAddress)
-            self.deviceUsername = QLineEdit()
-            self.deviceUsername.setPlaceholderText("Device Username")
-            loginContainer.addWidget(self.deviceUsername)
-            self.devicePassword = QLineEdit()
-            self.devicePassword.setPlaceholderText("Device Password")
-            loginContainer.addWidget(self.devicePassword)
+            self.deviceAddress = IconLineEdit('./images/device.png', "Device Address",False)
+            loginContainer.addWidget(self.deviceAddress.getWidget())
+            self.deviceUsername = IconLineEdit('./images/user.png', "Device Username",False)
+            loginContainer.addWidget(self.deviceUsername.getWidget())
+            self.devicePassword = IconLineEdit('./images/key.png', "Device Password",True)
+            loginContainer.addWidget(self.devicePassword.getWidget())
             loginButton = QPushButton("Connect to device")
             loginButton.setObjectName("deploymentButton")
             loginButton.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
-            loginButton.clicked.connect(self.loginToDevice)
+            loginButton.clicked.connect(self.getHardwareDetails)
             loginContainer.addWidget(loginButton)
 
             loginFrame = QFrame()
             loginFrame.setLayout(loginContainer)
-            loginFrame.setStyleSheet("background-color: white")
-            detailsContainer.addWidget(loginFrame)
+            loginFrame.setObjectName("loginFrame")
+            loginFrame.setStyleSheet("QFrame#loginFrame {background-color: white; border-bottom-left-radius: 10px; border-bottom-right-radius: 10pxd}")
+            loginHeadingLayout.addWidget(loginFrame)
+            detailsContainer.addLayout(loginHeadingLayout)
+
+            statisticsHeadingLayout = QVBoxLayout()
+            statisticsHeadingLayout.setSpacing(0)
+            statisticsLabel = ImageLable('./images/hexagon.png', "Network Statistics")
+            statisticsLabel.setStyleSheet("background-color: rgb(0,188,212);border-top-left-radius: 10px;border-top-right-radius: 10px;font-size:16px;")
+            statisticsHeadingLayout.addWidget(statisticsLabel.getWidget())
 
             statisticsContainer = QVBoxLayout()
-            statisticsLabel = QLabel("Network Statistics")
-            statisticsLabel.setStyleSheet("background-color: rgb(0,188,212); border: 1px solid black; font-size:16px;")
-            statisticsContainer.addWidget(statisticsLabel)
+
             self.statisticsDetails = QTextEdit()
             self.statisticsDetails.setReadOnly(True)
-            self.statisticsDetails.setText("When you log into a device it's details will appear here")
+            self.statisticsDetails.setText("When you log into a device or map the network, relevant information will appear here.")
             statisticsContainer.addWidget(self.statisticsDetails)
 
             statisticsFrame = QFrame()
             statisticsFrame.setLayout(statisticsContainer)
-            statisticsFrame.setStyleSheet("background-color: white")
-            detailsContainer.addWidget(statisticsFrame)
+            statisticsFrame.setStyleSheet("background-color: white; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;")
+            statisticsHeadingLayout.addWidget(statisticsFrame)
+            detailsContainer.addLayout(statisticsHeadingLayout)
             innerContainer.addLayout(detailsContainer)
 
-            mapContainer = QVBoxLayout(window)
-            dir_path = os.path.dirname(os.path.realpath(__file__))
-            self.image = QLabel()
-            blankImage = QPixmap(551,416)
-            blankImage.fill(Qt.white)
-            mapImage = QPixmap(blankImage)
-            mapImage = mapImage.scaled(mapImage.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self.image.setPixmap(mapImage)
-            self.image.setStyleSheet("background-color: black")
-            self.image.mousePressEvent = self.getPos
-            mapContainer.addWidget(self.image)
+            mapContainer = QVBoxLayout()
+
+            # use matplotlib bankends for pyqt
+            self.figure = plt.figure()
+            self.canvas = Canvas(self.figure)
+            toolbar = Toolbar(self.canvas, self.window)
+            self.canvas.mpl_connect('button_press_event', self.getPos)
+
+
+            mapContainer.addWidget(toolbar)
+            mapContainer.addWidget(self.canvas)
             self.scannerProgressBar = QProgressBar(window)
             self.scannerProgressBar.setProperty("value", 0)
             self.scannerProgressBar.setOrientation(Qt.Horizontal)
             self.scannerProgressBar.setTextVisible(False)
             self.scannerProgressBar.setObjectName("self.progressBar")
-            self.scannerProgressBar.setStyleSheet("QProgressBar::chunk:horizontal { background-color: rgb(0,188,212);}")
+            self.scannerProgressBar.setStyleSheet("QProgressBar::chunk:horizontal { background-color: rgb(0,188,212)}")
             mapContainer.addWidget(self.scannerProgressBar)
 
             mappingButton = QPushButton("Start network mapping")
+            mappingButton.setWhatsThis("Will scan your network and generate an image of it to be displayed above")
             mappingButton.setObjectName("deploymentButton")
             mappingButton.setStyleSheet("background-color: rgb(0,188,212); font-size:16px;")
             mappingButton.clicked.connect(self.displayImage)
@@ -112,81 +120,238 @@ class TroubleshootingModule:
             verticalContainer.addLayout(innerContainer)
 
             self.layout.setLayout(verticalContainer)
-        except Exception as e: print(str(e))
+        except Exception as e:
+            print(str(e))
 
+    # Refresh window
     def refreshPage(self):
-        if(self.blocked):
-            msg.messageWindow("Process is currently running","Cannot refresh page while scanning network",False)
+        if self.blocked:
+            secondaryWindows.messageWindow("Process is currently running", "Cannot refresh page while scanning network", False)
         else:
-            #clear fields and progress bar
+            # clear fields and progress bar
             self.scannerProgressBar.setValue(0)
             self.deviceAddress.setText("")
             self.deviceUsername.setText("")
             self.devicePassword.setText("")
+            self.statisticsDetails.setText("When you log into a device it's details will appear here")
 
-            #clear image
-            blankImage = QPixmap(551, 416)
-            blankImage.fill(Qt.white)
-            mapImage = QPixmap(blankImage)
-            mapImage = mapImage.scaled(mapImage.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self.image.setPixmap(mapImage)
+            # clear canvas
+            self.canvas.figure.clf()
+            self.canvas.draw()
 
-    # get mouse position from click event
+    # Get mouse position from click event
     def getPos(self, event):
-        x = event.pos().x()
-        y = event.pos().y()
-        if 46 <= y < 462:
-            y -= 46
-            print(str(x) + " " + str(y))
+        try:
+            # make sure we're looking in the window and positioning data is available
+            if not (event.xdata is None or event.ydata is None) and not self.nodePositioning is None:
+                # set gap around actual position to allow for mouse click
+                gap = 0.1
+                for key in self.nodePositioning:
+                    currentDictEntry = self.nodePositioning[key]
+                    currentKey = key
+                    x = currentDictEntry[0]
+                    y = currentDictEntry[1]
+                    # if we fall within the gap of the current key then we're close to that key
+                    if (-gap < x - event.xdata < gap) and (-gap < y - event.ydata < gap):
+                        # check if we're looking at our ip address
+                        myIp = self.scanner.getMyIpAddr()
+                        if not currentKey == myIp:
+                            currentKey = self.scanner.getMissingIpNumbers() + currentKey
+                        macAddr = self.scanner.returnMacAddr(currentKey)
 
+                        vendor = self.scanner.returnVendor(macAddr)
+                        self.deviceAddress.setText(currentKey)
+                        self.statisticsDetails.setText("IP Address: " + currentKey
+                                                       + "\nMac Address: " + macAddr
+                                                       + "\nVendor: " + vendor + "\n")
+        except Exception as e:
+            print(str(e))
 
-
-    # update the network map image with a new scan
+    # Update the network map image with a new scan
     def displayImage(self):
         try:
             if not self.blocked:
                 self.blocked = True
                 thread = NetworkScanner(self.window)
+                thread.setup(self.scanner)
                 thread.trigger.connect(self.updateScannerProgress)
-                thread.setup(1)
                 thread.start()
-                self.threads.append(thread)
             else:
-                QMessageBox.information(self, "Scan Running", "You're already running a network scan")
-        except Exception as e: print(str(e))
+                secondaryWindows.messageWindow("Scan Running", "You're already running a network scan", False)
+        except Exception as e:
+            print(str(e))
 
-    def loginToDevice(self):
-        print("login")
-
-
-    # called from thread, updates the progress bar or wraps up and sets new image
+    # Called from thread, updates the progress bar or wraps up and sets new image
     def updateScannerProgress(self, percentage):
-        try:
-            if (percentage == 101):
-                G = scanner.graphLocation
-                nx.draw_networkx(G, node_color= '#00BCD4', node_size=500)
-                plt.axis('off')
-                plt.savefig("network_path.png", bbox_inches='tight')  # save as png
+        if (percentage == -1):
+            secondaryWindows.messageWindow("Error","Error Scanning Network",True)
+            self.blocked = False
+        else:
+            try:
+                if (percentage == 101):
+                    networkGraph = self.scanner.getGraph()
+                    self.nodePositioning = nx.spring_layout(networkGraph)  # set positioning so we can reference it later
+                    nx.draw_networkx(networkGraph, self.nodePositioning, node_color='#00BCD4', node_size=500)
+                    plt.axis('off')
+                    self.figure = plt.figure()
+                    self.canvas.draw()
 
-                dir_path = os.path.dirname(os.path.realpath(__file__))
-                mapImage = QPixmap(dir_path + '\\network_path.png')
-                mapImage = mapImage.scaled(mapImage.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                self.image.setPixmap(mapImage)
-                self.blocked = False
-                self.scannerProgressBar.setValue(0)
-                self.threads.clear()
-            else:
-                self.scannerProgressBar.setValue(percentage)
-        except Exception as e: print(str(e))
+                    self.blocked = False
+                    self.scannerProgressBar.setValue(0)
+                else:
+                    self.scannerProgressBar.setValue(percentage)
+            except Exception as e:
+                print(str(e))
 
+    # Get detailed information from a Juniper device on the network
+    def getHardwareDetails(self):
+        address = self.deviceAddress.text()
+        username = self.deviceUsername.text()
+        password = self.devicePassword.text()
+
+        if (len(address) < 1 or len(username) < 1 or len(password) < 1):
+            secondaryWindows.messageWindow("Empty Fields", "Please ensure all fields are filled", False)
+            return
+
+        thread = DeviceInfo(self.window)
+        thread.trigger.connect(self.updateStatisticField)
+        thread.setup(self, address, username, password)
+        thread.start()
+        #show we're connecting to the device
+        self.statisticsDetails.append("\n Connecting to device...")
+
+    # Add info to the device statistics field
+    def updateStatisticField(self, code):
+        if code==0:
+            self.statisticsDetails.append("\n Connected!")
+            self.statisticsDetails.append(self.statisticsText)
+        elif code ==-1:
+            self.statisticsDetails.append("\n Unsupported Device!")
+            secondaryWindows.messageWindow("Unsupported Device",
+                                           """Error getting data from device as it's not currently supported, Junos devices are currently the only
+                                           ones supported""",
+                                           True)
+        else:
+            secondaryWindows.messageWindow("Error", "Error getting data from the Juniper Device. Check input data and try again.", True)
+
+# Parse the xml output form the Juniper device
+def getStatusInfo(xml):
+    try:
+        xml = xml.split("<rpc-reply")[1]
+        xml = "<rpc-reply" + xml
+        xml = xml.split("</rpc-reply>")[0]
+        xml += "</rpc-reply>"
+
+        xmlDict = xmltodict.parse(xml)
+        upTime = xmlDict['rpc-reply']['route-engine-information']['route-engine']['up-time']['#text']
+        cpuTemp = xmlDict['rpc-reply']['route-engine-information']['route-engine']['cpu-temperature']['#text']
+        #remove the F reafing form the string
+        cpuTemp = cpuTemp.split("/")[0]
+        memUtilised = xmlDict['rpc-reply']['route-engine-information']['route-engine']['memory-system-total-util']
+
+        return "Uptime: " + upTime + "\nCpu Temp: " + cpuTemp + "\nMem Utilised: " + memUtilised + "%"
+    except Exception as e:
+        print("Error connecting to the database: " + str(e))
+
+# Check if there are any current alarms on the device
+def isAlarms(xml):
+    try:
+        xml = xml.split("<rpc-reply")[1]
+        xml = "<rpc-reply" + xml
+        xml = xml.split("</rpc-reply>")[0]
+        xml += "</rpc-reply>"
+
+        xmlDict = xmltodict.parse(xml)
+        alarms=xmlDict['rpc-reply']['alarm-information']['alarm-summary']
+
+        if "no-active-alarms" in alarms:
+            return False
+        else:
+            return True
+    except Exception as e:
+        print("Error connecting to the database: " + str(e))
+
+# Create a thread to scan the network
 class NetworkScanner(QThread):
     trigger = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super(NetworkScanner, self).__init__(parent)
+        self.scanner = None
 
-    def setup(self, thread_no):
-        self.thread_no = thread_no
+    def setup(self,scanner):
+        self.scanner = scanner
 
     def run(self):
-        scanner.scanNetwork(self)
+        self.scanner.scanNetwork(self)
+
+# File grabber class to get files off UI thread
+class DeviceInfo(QThread):
+    trigger = pyqtSignal(int)
+
+    def __init__(self, parent=None):
+        super(DeviceInfo, self).__init__(parent)
+
+    def setup(self, callingWindow, address, username, password):
+        self.callingWindow = callingWindow
+        self.address = address
+        self.username = username
+        self.password = password
+
+    def run(self):
+        try:
+            returnedData = loginToDevice(self.callingWindow,self.address, self.username, self.password)
+            if returnedData is "NOJUNOS":
+                self.trigger.emit(-1)
+            elif not returnedData is None:
+                self.callingWindow.statisticsText = returnedData
+                self.trigger.emit(0)
+            else:
+                self.trigger.emit(1)
+        except:
+            self.trigger.emit(1)
+
+# Log into juniper device and pull down hardware information
+def loginToDevice(callingWindow,address, username, password):
+
+    patch_crypto_be_discovery()
+
+    if isJunosDevice(address):
+        try:
+            #Log into the device
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(address, 22, username, password)
+            term = ssh.invoke_shell()
+
+            #Check if root is logging in
+            if username=="root":
+                deployment.send_command(term, "cli")
+
+            #Gather data from the device
+            deployment.send_command(term, "set cli screen-length 0")
+            sysStatus = deployment.send_command(term, "show chassis routing-engine | display xml")
+            alarms = deployment.send_command(term, "show chassis alarms | display xml")
+
+            sysStatusData = getStatusInfo(sysStatus)
+            alarm = isAlarms(alarms)
+
+            ssh.close()
+
+            macAddr = callingWindow.scanner.returnMacAddr(address)
+            vendor = callingWindow.scanner.returnVendor(macAddr)
+
+            basicDetails = ("IP Address: " + address
+                                           + "\nMac Address: " + macAddr
+                                           + "\nVendor: " + vendor + "\n")
+
+            if alarm:
+                sysStatusData += "\nALARM WARNING!"
+            else:
+                sysStatusData += "\nNo Alarms"
+
+            return sysStatusData
+        except:
+            return None
+    else:
+        return "NOJUNOS"

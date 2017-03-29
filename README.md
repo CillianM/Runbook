@@ -1,5 +1,4 @@
 # Network Deployment Automation Maintenance Tool
-<img src="http://i.imgur.com/o0Jo5df.png" width="48">
 
 ### Deployment Module
 <img src="http://i.imgur.com/DtyRRv6.png=100x20" width="48">
@@ -14,9 +13,9 @@ This module connects to a database and an FTP server to provide version control 
 This module lets you scan your network and log in to devices you have access to for system information (CPU/RAM usage, etc.)
 
 ### Prerequisites: 
-+ Your own FTP server with anonymous login
-+ Your own database with the schema described below
-+ If you're using the deployment module then the use of a console server would allow for quicker bulk updates
++ Your own FTP server with users, Logged in user must have read write access
++ Your own database with the schema described in the sql file in /code/runbook.sql
++ To make use of the deployment module a console server is required
 
 ### Libraries Required: 
 [xmltodict](https://pypi.python.org/pypi/xmltodict)
